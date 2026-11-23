@@ -11,8 +11,19 @@ const EDF_PATH = '/tmp/recording.edf';
 const STAGES = ['W', 'REM', 'N1', 'N2', 'N3'];            // hypnogram order, top to bottom
 const STAGE_VAR = { W: '--st-w', REM: '--st-rem', N1: '--st-n1', N2: '--st-n2', N3: '--st-n3' };
 const STAGE_NAME = { W: 'Wake', REM: 'REM', N1: 'N1', N2: 'N2', N3: 'N3' };
-const PAD = { l: 46, r: 12, t: 10, b: 28 };               // shared so time axes line up
-const CANVAS_H = 190;                                      // hypnogram and spectrogram height (px)
+
+const PLOT_H = 200;                                        // hypnogram and spectrogram height (px)
+const PLOT_MARGIN = { l: 56, r: 76, t: 8, b: 34 };         // identical in both plots so time axes line up
+const PLOT_CONFIG = {
+  responsive: true,
+  displaylogo: false,
+  modeBarButtonsToRemove: ['select2d', 'lasso2d', 'autoScale2d'],
+};
+// Colour ramp built from the Circadia palette, low to high power
+const SPEC_COLORSCALE = [
+  [0, '#014370'], [0.2, '#1b6799'], [0.4, '#9bdfe2'],
+  [0.6, '#ffecd4'], [0.8, '#ffa75d'], [1, '#fc544a'],
+];
 
 const METRICS = [
   ['tst_min',     'Total sleep time',       'min'],
@@ -387,163 +398,174 @@ function render(data) {
 
   results.hidden = false;
   $('#markers-card').hidden = false;
-  drawHypnogram(data);
-  drawSpectrogram(data);
+  drawPlots(data, true).catch((err) => log(`Plot failed: ${err?.message ?? err}`, 'err'));
+}
+
+// ── Plots (Plotly) ────────────────────────────────────────────────────────
+function baseLayout(total) {
+  const soft = cssVar('--fg-soft');
+  const rule = cssVar('--rule');
+  return {
+    height: PLOT_H,
+    margin: PLOT_MARGIN,
+    paper_bgcolor: 'rgba(0,0,0,0)',
+    plot_bgcolor: 'rgba(0,0,0,0)',
+    font: { family: 'Alice, serif', size: 11, color: soft },
+    dragmode: 'zoom',
+    uirevision: 'keep',                        // keeps the user's zoom when only the theme redraws
+    modebar: { bgcolor: 'rgba(0,0,0,0)', color: soft, activecolor: cssVar('--accent') },
+    hoverlabel: {
+      bgcolor: cssVar('--bg'),
+      bordercolor: rule,
+      font: { family: 'Alice, serif', size: 11, color: cssVar('--fg') },
+    },
+    xaxis: { range: [0, total], ticksuffix: ' h', gridcolor: rule, zeroline: false },
+  };
 }
 
 function drawHypnogram(data) {
-  const canvas = $('#hypnogram');
-  const dpr = window.devicePixelRatio || 1;
-  const cssW = canvas.clientWidth;
-  const cssH = CANVAS_H;
-  canvas.width = cssW * dpr;
-  canvas.height = cssH * dpr;
-
-  const ctx = canvas.getContext('2d');
-  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-  ctx.clearRect(0, 0, cssW, cssH);
-
-  const pad = PAD;
-  const w = cssW - pad.l - pad.r;
-  const h = cssH - pad.t - pad.b;
+  const epochS = data.recording.epoch_s;
+  const epochH = epochS / 3600;
   const n = data.stages.length;
-  const hours = (n * data.recording.epoch_s) / 3600;
-  const xOf = (i) => pad.l + (i / n) * w;
-  const yOf = (s) => pad.t + (STAGES.indexOf(s) + 0.5) * (h / STAGES.length);
-
-  const soft = cssVar('--fg-soft');
+  const level = Object.fromEntries(STAGES.map((s, i) => [s, i]));
   const rule = cssVar('--rule');
-  ctx.font = '11px Alice, serif';
-  ctx.textBaseline = 'middle';
 
-  // Level guides and labels
-  ctx.textAlign = 'right';
-  for (const s of STAGES) {
-    const y = yOf(s);
-    ctx.strokeStyle = rule;
-    ctx.lineWidth = 1;
-    ctx.beginPath(); ctx.moveTo(pad.l, y); ctx.lineTo(pad.l + w, y); ctx.stroke();
-    ctx.fillStyle = soft;
-    ctx.fillText(STAGE_NAME[s], pad.l - 8, y);
-  }
+  // Thin stepped line joining the stages (gaps where an epoch is unstaged) ...
+  const sx = [];
+  const sy = [];
+  data.stages.forEach((s, i) => { sx.push(i * epochH); sy.push(s ? level[s] : null); });
+  const traces = [{
+    x: sx, y: sy, mode: 'lines', connectgaps: false, hoverinfo: 'skip', showlegend: false,
+    line: { shape: 'hv', width: 1, color: cssVar('--fg-soft') },
+  }];
 
-  // Hour ticks
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'top';
-  for (let hr = 0; hr <= Math.floor(hours); hr++) {
-    const x = pad.l + (hr / hours) * w;
-    ctx.fillStyle = soft;
-    ctx.fillText(`${hr} h`, x, pad.t + h + 8);
-  }
-
-  // Runs of identical stage, with vertical connectors
-  let i = 0;
-  let prev = null;
-  while (i < n) {
+  // ... then one thick, coloured trace per stage, made of runs of identical stage
+  const runs = Object.fromEntries(STAGES.map((s) => [s, { x: [], y: [], d: [] }]));
+  for (let i = 0; i < n;) {
     const s = data.stages[i];
     let j = i;
     while (j + 1 < n && data.stages[j + 1] === s) j++;
     if (s) {
-      const y = yOf(s);
-      if (prev && prev.y !== y) {
-        ctx.strokeStyle = soft;
-        ctx.lineWidth = 1;
-        ctx.beginPath(); ctx.moveTo(xOf(i), prev.y); ctx.lineTo(xOf(i), y); ctx.stroke();
-      }
-      ctx.strokeStyle = cssVar(STAGE_VAR[s]);
-      ctx.lineWidth = 4;
-      ctx.lineCap = 'butt';
-      ctx.beginPath(); ctx.moveTo(xOf(i), y); ctx.lineTo(xOf(j + 1), y); ctx.stroke();
-      prev = { y };
-    } else {
-      prev = null;     // unstaged (artefact) epochs leave a gap
+      const a = i * epochH;
+      const b = (j + 1) * epochH;
+      const mins = ((j + 1 - i) * epochS) / 60;
+      runs[s].x.push(a, (a + b) / 2, b, null);      // midpoint gives a hover target
+      runs[s].y.push(level[s], level[s], level[s], null);
+      runs[s].d.push(mins, mins, mins, null);
     }
     i = j + 1;
   }
-}
+  for (const s of STAGES) {
+    traces.push({
+      x: runs[s].x, y: runs[s].y, customdata: runs[s].d,
+      mode: 'lines', connectgaps: false, showlegend: false, name: STAGE_NAME[s],
+      line: { width: 5, color: cssVar(STAGE_VAR[s]) },
+      hovertemplate: `${STAGE_NAME[s]}, %{customdata:.0f} min<br>%{x:.2f} h<extra></extra>`,
+    });
+  }
 
-// ── Spectrogram ────────────────────────────────────────────────────────────────────────
-// Colour ramp built from the Circadia palette, low to high power
-const SPEC_STOPS = ['#014370', '#1b6799', '#9bdfe2', '#ffecd4', '#ffa75d', '#fc544a']
-  .map((h) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16)));
-
-function specColor(t) {
-  const x = Math.min(1, Math.max(0, t)) * (SPEC_STOPS.length - 1);
-  const i = Math.min(SPEC_STOPS.length - 2, Math.floor(x));
-  const f = x - i;
-  return SPEC_STOPS[i].map((c, k) => Math.round(c + (SPEC_STOPS[i + 1][k] - c) * f));
+  const layout = baseLayout(n * epochH);
+  layout.yaxis = {
+    tickmode: 'array',
+    tickvals: STAGES.map((_, i) => i),
+    ticktext: STAGES.map((s) => STAGE_NAME[s]),
+    range: [STAGES.length - 0.5, -0.5],           // Wake at the top
+    fixedrange: true,
+    gridcolor: rule,
+    zeroline: false,
+  };
+  return window.Plotly.react('hypnogram', traces, layout, PLOT_CONFIG);
 }
 
 function drawSpectrogram(data) {
   const card = $('#spec-card');
   const sp = data.spectrogram;
-  if (!sp || !sp.power || !sp.power.length) { card.hidden = true; return; }
+  if (!sp || !sp.power || !sp.power.length) {
+    card.hidden = true;
+    return Promise.resolve();
+  }
   card.hidden = false;
 
-  const canvas = $('#spectrogram');
-  const dpr = window.devicePixelRatio || 1;
-  const cssW = canvas.clientWidth;
-  const cssH = CANVAS_H;
-  canvas.width = cssW * dpr;
-  canvas.height = cssH * dpr;
-  const ctx = canvas.getContext('2d');
-  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-  ctx.clearRect(0, 0, cssW, cssH);
-
-  const pad = PAD;
-  const w = cssW - pad.l - pad.r;
-  const h = cssH - pad.t - pad.b;
   const n = sp.power.length;
   const F = sp.freqs.length;
-  const hours = (n * data.recording.epoch_s) / 3600;
+  const epochH = data.recording.epoch_s / 3600;
 
   // Robust colour limits (2nd to 98th percentile)
   const vals = sp.power.flat().filter(Number.isFinite).sort((a, b) => a - b);
-  const lo = vals[Math.floor(vals.length * 0.02)];
-  const hi = vals[Math.floor(vals.length * 0.98)];
-  const span = hi - lo || 1;
+  const zmin = vals[Math.floor(vals.length * 0.02)];
+  const zmax = vals[Math.floor(vals.length * 0.98)];
 
-  // Epochs on x, frequency on y (low at the bottom), drawn 1 px per cell then scaled
-  const off = document.createElement('canvas');
-  off.width = n;
-  off.height = F;
-  const octx = off.getContext('2d');
-  const img = octx.createImageData(n, F);
-  for (let i = 0; i < n; i++) {
-    for (let j = 0; j < F; j++) {
-      const v = sp.power[i][j];
-      const p = ((F - 1 - j) * n + i) * 4;
-      if (Number.isFinite(v)) {
-        const [r, g, b] = specColor((v - lo) / span);
-        img.data[p] = r; img.data[p + 1] = g; img.data[p + 2] = b; img.data[p + 3] = 255;
-      }
-    }
-  }
-  octx.putImageData(img, 0, 0);
-  ctx.imageSmoothingEnabled = true;
-  ctx.imageSmoothingQuality = 'high';
-  ctx.drawImage(off, pad.l, pad.t, w, h);
+  // Plotly wants z[row = frequency][column = epoch]; x holds epoch centres
+  const z = Array.from({ length: F }, (_, j) => sp.power.map((row) => row[j]));
+  const x = Array.from({ length: n }, (_, i) => (i + 0.5) * epochH);
 
-  // Axes
   const soft = cssVar('--fg-soft');
-  ctx.font = '11px Alice, serif';
-  ctx.fillStyle = soft;
-  ctx.textAlign = 'right';
-  ctx.textBaseline = 'middle';
-  const fmin = sp.freqs[0];
-  const fmax = sp.freqs[F - 1];
-  for (let f = Math.ceil(fmin / 10) * 10; f <= fmax; f += 10) {
-    ctx.fillText(`${f} Hz`, pad.l - 8, pad.t + h * (1 - (f - fmin) / (fmax - fmin)));
-  }
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'top';
-  for (let hr = 0; hr <= Math.floor(hours); hr++) {
-    ctx.fillText(`${hr} h`, pad.l + (hr / hours) * w, pad.t + h + 8);
-  }
+  const trace = {
+    type: 'heatmap', x, y: sp.freqs, z, zmin, zmax,
+    colorscale: SPEC_COLORSCALE, zsmooth: false,
+    hovertemplate: 'Time %{x:.2f} h<br>%{y:.1f} Hz<br>%{z:.1f} dB<extra></extra>',
+    colorbar: {
+      thickness: 10, len: 0.95, outlinewidth: 0, xpad: 6,
+      title: { text: 'dB', side: 'top' },
+      tickfont: { size: 10, color: soft },
+    },
+  };
+
+  const layout = baseLayout(n * epochH);
+  layout.yaxis = {
+    range: [sp.freqs[0], sp.freqs[F - 1]],
+    ticksuffix: ' Hz',
+    gridcolor: cssVar('--rule'),
+    zeroline: false,
+  };
 
   $('#spec-note').textContent =
     `${sp.channel}, power spectral density per epoch in dB. Colour range is the 2nd to 98th ` +
-    `percentile (${lo.toFixed(0)} to ${hi.toFixed(0)} dB).`;
+    `percentile (${zmin.toFixed(0)} to ${zmax.toFixed(0)} dB).`;
+  return window.Plotly.react('spectrogram', [trace], layout, PLOT_CONFIG);
+}
+
+// Zooming or panning one plot's time axis moves the other's, so they stay aligned
+function linkTimeZoom(ids, total) {
+  const divs = ids.map((id) => document.getElementById(id)).filter((d) => d && d.on);
+  if (divs.length < 2) return;
+  let lock = false;
+  for (const src of divs) {
+    if (src._hypnosLinked) continue;
+    src._hypnosLinked = true;
+    src.on('plotly_relayout', (ev) => {
+      if (lock) return;
+      let update;
+      if (ev['xaxis.range[0]'] !== undefined) {
+        update = { 'xaxis.range': [ev['xaxis.range[0]'], ev['xaxis.range[1]']] };
+      } else if (ev['xaxis.range'] !== undefined) {
+        update = { 'xaxis.range': ev['xaxis.range'] };
+      } else if (ev['xaxis.autorange']) {
+        update = { 'xaxis.range': [0, total] };     // double-click reset
+      } else {
+        return;
+      }
+      lock = true;
+      Promise.all(divs.filter((d) => d !== src).map((d) => window.Plotly.relayout(d, update)))
+        .finally(() => { lock = false; });
+    });
+  }
+}
+
+async function drawPlots(data, fresh) {
+  if (!window.Plotly) {
+    log('Plotly did not load, so the plots are unavailable.', 'err');
+    return;
+  }
+  const ids = ['hypnogram', 'spectrogram'];
+  if (fresh) {
+    for (const id of ids) {
+      window.Plotly.purge(id);             // new recording: drop old zoom and listeners
+      document.getElementById(id)._hypnosLinked = false;
+    }
+  }
+  await Promise.all([drawHypnogram(data), drawSpectrogram(data)]);
+  linkTimeZoom(ids, data.stages.length * (data.recording.epoch_s / 3600));
 }
 
 // ── Events ────────────────────────────────────────────────────────────────
@@ -575,10 +597,9 @@ $('#dl-hypnogram').addEventListener('click', () => {
   download('hypnos_hypnogram.csv', `epoch,onset_s,stage\n${rows.join('\n')}\n`);
 });
 
-function redraw() {
-  if (!last) return;
-  drawHypnogram(last);
-  drawSpectrogram(last);
-}
-window.addEventListener('resize', redraw);
-window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', redraw);
+// Plotly resizes itself (responsive); only a theme change needs a redraw
+window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
+  if (last && !results.hidden) {
+    drawPlots(last, false).catch((err) => log(`Plot failed: ${err?.message ?? err}`, 'err'));
+  }
+});

@@ -76,13 +76,13 @@
 
     <div class="card">
       <h3>Hypnogram</h3>
-      <canvas id="hypnogram" height="260"></canvas>
-      <p class="note">Stages are scored automatically with <code>mrpheus::stage_epochs()</code> (YASA model, Vallat &amp; Walker, 2021).</p>
+      <div id="hypnogram" class="plot"></div>
+      <p class="note">Stages are scored automatically with <code>mrpheus::stage_epochs()</code> (YASA model, Vallat &amp; Walker, 2021). Drag to zoom, double-click to reset; the hypnogram and spectrogram time axes are linked.</p>
     </div>
 
     <div class="card" id="spec-card">
       <h3>Spectrogram</h3>
-      <canvas id="spectrogram" height="260"></canvas>
+      <div id="spectrogram" class="plot"></div>
       <p class="note" id="spec-note"></p>
     </div>
 
@@ -107,6 +107,9 @@
   <a href="https://mrpheus.circadia-lab.uk">mrpheus</a> and <a href="https://hypnor.circadia-lab.uk">hypnoR</a>.
 </footer>
 
+<!-- Plotly (cartesian bundle, version pinned); falls back to the official CDN if jsDelivr fails -->
+<script src="https://cdn.jsdelivr.net/npm/plotly.js-cartesian-dist-min@2.35.2/plotly-cartesian.min.js"
+        onerror="this.onerror=null;var s=document.createElement('script');s.src='https://cdn.plot.ly/plotly-cartesian-2.35.2.min.js';document.head.appendChild(s);"></script>
 <script type="module" src="app.js"></script>
 </body>
 </html>
