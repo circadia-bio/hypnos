@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="en-GB">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>hypnos · PSG metrics in your browser</title>
+  <meta name="description" content="Select an EDF file and get standard polysomnography metrics. Everything runs in your browser; no data leaves your device.">
+  <link rel="icon" href="favicon.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Alice&family=Playfair+Display:wght@600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<nav class="navbar">
+  <a class="brand" href="./">
+    <img src="logo.png" alt="" onerror="this.remove()">
+    <span>hypnos</span>
+  </a>
+  <div class="nav-links">
+    <a href="https://circadia-lab.uk">Circadia</a>
+    <a href="https://mrpheus.circadia-lab.uk">mrpheus</a>
+    <a href="https://github.com/circadia-bio/hypnos">GitHub</a>
+  </div>
+</nav>
+
+<main>
+
+  <div class="layout">
+  <aside class="side">
+
+  <p class="badges">
+    <span class="pill">No data leaves your device</span>
+    <span class="pill pill-muted" id="engine-pill">Engine: starting</span>
+  </p>
+
+  <section class="card" id="drop-card">
+    <label class="dropzone" id="dropzone" for="file-input">
+      <span class="dz-title">Select an EDF file</span>
+      <span class="dz-sub">or drop it here</span>
+      <input type="file" id="file-input" accept=".edf,.EDF" hidden>
+    </label>
+    <p class="note" id="file-note"></p>
+  </section>
+
+  <section class="card" id="status-card" hidden>
+    <div class="status-row">
+      <span class="spinner" id="spinner"></span>
+      <strong id="status-text">Starting R</strong>
+      <span class="note" id="elapsed"></span>
+    </div>
+    <div class="progress"><div class="progress-fill" id="progress-fill"></div></div>
+    <p class="note" id="status-sub"></p>
+    <details id="log-details">
+      <summary>Details</summary>
+      <pre id="log"></pre>
+    </details>
+  </section>
+
+  <section class="card" id="markers-card" hidden>
+    <h3>Clinical markers</h3>
+    <div class="markers" id="metrics-grid"></div>
+  </section>
+
+  </aside>
+
+  <div class="content">
+  <section id="results" hidden>
+
+    <div class="card">
+      <h3>Stage composition</h3>
+      <div class="stagebar" id="stagebar"></div>
+      <div class="legend" id="stage-legend"></div>
+    </div>
+
+    <div class="card">
+      <h3>Hypnogram</h3>
+      <canvas id="hypnogram" height="260"></canvas>
+      <p class="note">Stages are scored automatically with <code>mrpheus::stage_epochs()</code> (YASA model, Vallat &amp; Walker, 2021).</p>
+    </div>
+
+    <div class="card" id="spec-card">
+      <h3>Spectrogram</h3>
+      <canvas id="spectrogram" height="260"></canvas>
+      <p class="note" id="spec-note"></p>
+    </div>
+
+    <div class="actions">
+      <button class="btn" id="dl-metrics">Download metrics (CSV)</button>
+      <button class="btn" id="dl-hypnogram">Download hypnogram (CSV)</button>
+    </div>
+
+  </section>
+
+  <section class="card placeholder">
+    <h3>Results</h3>
+    <p class="note">Sleep architecture, stage composition and the hypnogram will appear here when the analysis finishes.</p>
+  </section>
+  </div>
+  </div>
+
+</main>
+
+<footer class="footer">
+  Part of the <a href="https://circadia-lab.uk">Circadia Lab</a> ecosystem, built on
+  <a href="https://mrpheus.circadia-lab.uk">mrpheus</a> and <a href="https://hypnor.circadia-lab.uk">hypnoR</a>.
+</footer>
+
+<script type="module" src="app.js"></script>
+</body>
+</html>
