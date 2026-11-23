@@ -96,6 +96,16 @@ code {
 
 .nav-links { display: flex; gap: 1.4rem; font-size: 0.8rem; }
 
+/* Icons (Bootstrap Icons, as on circadia-lab.uk) */
+.bi { vertical-align: -0.125em; }
+.nav-links a,
+.btn,
+.pill { display: inline-flex; align-items: center; gap: 0.4em; }
+h3 .bi { color: var(--accent); margin-right: 0.45rem; font-size: 0.95em; }
+summary .bi { margin-right: 0.4em; }
+.dz-icon { font-size: 1.9rem; line-height: 1; color: var(--accent); margin-bottom: 0.15rem; }
+.marker-label .bi { margin-right: 0.4em; font-size: 1.05em; }
+
 /* ── Layout ─────────────────────────────────────────────── */
 main {
   max-width: 1280px;

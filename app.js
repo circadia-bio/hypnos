@@ -26,17 +26,18 @@ const SPEC_COLORSCALE = [
 ];
 
 const METRICS = [
-  ['tst_min',     'Total sleep time',       'min'],
-  ['tib_min',     'Time in bed',            'min'],
-  ['se_pct',      'Sleep efficiency',       '%'],
-  ['sol_min',     'Sleep onset latency',    'min'],
-  ['waso_min',    'Wake after sleep onset', 'min'],
-  ['rem_lat_min', 'REM latency',            'min'],
-  ['sws_lat_min', 'N3 latency',             'min'],
-  ['pct_n1',      'N1',                     '% TST'],
-  ['pct_n2',      'N2',                     '% TST'],
-  ['pct_n3',      'N3',                     '% TST'],
-  ['pct_rem',     'REM',                    '% TST'],
+  // key, label, unit, icon, stage (stage-coloured dot for the stage percentages)
+  ['tst_min',     'Total sleep time',       'min',   'bi-moon-stars-fill'],
+  ['tib_min',     'Time in bed',            'min',   'bi-clock-fill'],
+  ['se_pct',      'Sleep efficiency',       '%',     'bi-speedometer2'],
+  ['sol_min',     'Sleep onset latency',    'min',   'bi-hourglass-top'],
+  ['waso_min',    'Wake after sleep onset', 'min',   'bi-sun-fill'],
+  ['rem_lat_min', 'REM latency',            'min',   'bi-eye-fill'],
+  ['sws_lat_min', 'N3 latency',             'min',   'bi-moon-fill'],
+  ['pct_n1',      'N1',                     '% TST', 'bi-circle-fill', 'N1'],
+  ['pct_n2',      'N2',                     '% TST', 'bi-circle-fill', 'N2'],
+  ['pct_n3',      'N3',                     '% TST', 'bi-circle-fill', 'N3'],
+  ['pct_rem',     'REM',                    '% TST', 'bi-circle-fill', 'REM'],
 ];
 
 // ── DOM ───────────────────────────────────────────────────────────────────
@@ -53,6 +54,7 @@ const elapsedEl  = $('#elapsed');
 const logEl      = $('#log');
 const logDetails = $('#log-details');
 const enginePill = $('#engine-pill');
+const engineText = $('#engine-text');
 const results    = $('#results');
 
 let webR = null;
@@ -114,7 +116,7 @@ function setStatus(text, { working = true } = {}) {
 }
 
 function setEngine(text, ok = false) {
-  enginePill.textContent = `Engine: ${text}`;
+  engineText.textContent = `Engine: ${text}`;
   enginePill.classList.toggle('pill-ok', ok);
 }
 
@@ -366,13 +368,14 @@ function render(data) {
   // Metric cards
   const grid = $('#metrics-grid');
   grid.innerHTML = '';
-  for (const [key, label, unit] of METRICS) {
+  for (const [key, label, unit, icon, stage] of METRICS) {
     const value = data.metrics[key];
     if (value === null || value === undefined) continue;   // e.g. coarse-only metrics
     const card = document.createElement('div');
     card.className = 'marker';
+    const tint = stage ? ` style="color:var(${STAGE_VAR[stage]})"` : '';
     card.innerHTML =
-      `<p class="marker-label">${label}</p>` +
+      `<p class="marker-label"><i class="bi ${icon}"${tint}></i>${label}</p>` +
       `<p class="marker-value">${fmt(value)}<span class="marker-unit">${unit}</span></p>`;
     grid.appendChild(card);
   }

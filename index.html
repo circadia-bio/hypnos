@@ -9,6 +9,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Alice&family=Playfair+Display:wght@600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="vendor/bootstrap-icons.css">
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -19,9 +20,10 @@
     <span>hypnos</span>
   </a>
   <div class="nav-links">
-    <a href="https://circadia-lab.uk">Circadia</a>
-    <a href="https://mrpheus.circadia-lab.uk">mrpheus</a>
-    <a href="https://github.com/circadia-bio/hypnos">GitHub</a>
+    <a href="https://circadia-lab.uk"><i class="bi bi-house-fill"></i>Circadia</a>
+    <a href="https://mrpheus.circadia-lab.uk"><i class="bi bi-activity"></i>mrpheus</a>
+    <a href="https://hypnor.circadia-lab.uk"><i class="bi bi-moon-stars-fill"></i>hypnoR</a>
+    <a href="https://github.com/circadia-bio/hypnos"><i class="bi bi-github"></i>GitHub</a>
   </div>
 </nav>
 
@@ -31,12 +33,13 @@
   <aside class="side">
 
   <p class="badges">
-    <span class="pill">No data leaves your device</span>
-    <span class="pill pill-muted" id="engine-pill">Engine: starting</span>
+    <span class="pill"><i class="bi bi-shield-lock-fill"></i>No data leaves your device</span>
+    <span class="pill pill-muted" id="engine-pill"><i class="bi bi-cpu-fill"></i><span id="engine-text">Engine: starting</span></span>
   </p>
 
   <section class="card" id="drop-card">
     <label class="dropzone" id="dropzone" for="file-input">
+      <i class="bi bi-cloud-arrow-up-fill dz-icon"></i>
       <span class="dz-title">Select an EDF file</span>
       <span class="dz-sub">or drop it here</span>
       <input type="file" id="file-input" accept=".edf,.EDF" hidden>
@@ -53,13 +56,13 @@
     <div class="progress"><div class="progress-fill" id="progress-fill"></div></div>
     <p class="note" id="status-sub"></p>
     <details id="log-details">
-      <summary>Details</summary>
+      <summary><i class="bi bi-terminal-fill"></i>Details</summary>
       <pre id="log"></pre>
     </details>
   </section>
 
   <section class="card" id="markers-card" hidden>
-    <h3>Clinical markers</h3>
+    <h3><i class="bi bi-heart-pulse-fill"></i>Clinical markers</h3>
     <div class="markers" id="metrics-grid"></div>
   </section>
 
@@ -69,32 +72,32 @@
   <section id="results" hidden>
 
     <div class="card">
-      <h3>Stage composition</h3>
+      <h3><i class="bi bi-pie-chart-fill"></i>Stage composition</h3>
       <div class="stagebar" id="stagebar"></div>
       <div class="legend" id="stage-legend"></div>
     </div>
 
     <div class="card">
-      <h3>Hypnogram</h3>
+      <h3><i class="bi bi-bar-chart-steps"></i>Hypnogram</h3>
       <div id="hypnogram" class="plot"></div>
       <p class="note">Stages are scored automatically with <code>mrpheus::stage_epochs()</code> (YASA model, Vallat &amp; Walker, 2021). Drag to zoom, double-click to reset; the hypnogram and spectrogram time axes are linked.</p>
     </div>
 
     <div class="card" id="spec-card">
-      <h3>Spectrogram</h3>
+      <h3><i class="bi bi-grid-3x3-gap-fill"></i>Spectrogram</h3>
       <div id="spectrogram" class="plot"></div>
       <p class="note" id="spec-note"></p>
     </div>
 
     <div class="actions">
-      <button class="btn" id="dl-metrics">Download metrics (CSV)</button>
-      <button class="btn" id="dl-hypnogram">Download hypnogram (CSV)</button>
+      <button class="btn" id="dl-metrics"><i class="bi bi-download"></i>Download metrics (CSV)</button>
+      <button class="btn" id="dl-hypnogram"><i class="bi bi-download"></i>Download hypnogram (CSV)</button>
     </div>
 
   </section>
 
   <section class="card placeholder">
-    <h3>Results</h3>
+    <h3><i class="bi bi-bar-chart-line-fill"></i>Results</h3>
     <p class="note">Sleep architecture, stage composition and the hypnogram will appear here when the analysis finishes.</p>
   </section>
   </div>
