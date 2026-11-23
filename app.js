@@ -1,7 +1,7 @@
 // hypnos — client-side PSG metrics via webR (R compiled to WebAssembly).
 // The EDF file is mounted into webR's virtual filesystem and never uploaded.
 
-import { WebR } from 'https://webr.r-wasm.org/latest/webr.mjs';
+import { WebR } from 'https://webr.r-wasm.org/v0.6.0/webr.mjs';
 import { initWelcome } from './welcome.js';
 
 // ── Config ────────────────────────────────────────────────────────────────
