@@ -1,0 +1,23 @@
+# hypnos is a static site: there is no build step, and the repository root is published.
+
+[build]
+  publish = "."
+
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy = "strict-origin-when-cross-origin"
+    Permissions-Policy = "camera=(), microphone=(), geolocation=()"
+
+# Self-hosted icon font and logos: rarely change, so cache for 30 days.
+[[headers]]
+  for = "/vendor/*"
+  [headers.values]
+    Cache-Control = "public, max-age=2592000"
+
+# Staging model (7 MB): cache for a day, so an updated model reaches visitors quickly.
+[[headers]]
+  for = "/models/*"
+  [headers.values]
+    Cache-Control = "public, max-age=86400"
