@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>hypnos · PSG metrics in your browser</title>
   <meta name="description" content="Select an EDF file and get standard polysomnography metrics. Everything runs in your browser; no data leaves your device.">
-  <link rel="icon" href="favicon.png">
+  <link rel="icon" type="image/svg+xml" href="favicon.svg">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Alice&family=Playfair+Display:wght@600;700&display=swap" rel="stylesheet">
@@ -16,7 +16,7 @@
 
 <nav class="navbar">
   <a class="brand" href="./">
-    <img src="logo.png" alt="" onerror="this.remove()">
+    <img src="favicon.svg" alt="" onerror="this.remove()">
     <span>hypnos</span>
   </a>
   <div class="nav-links">
@@ -107,8 +107,27 @@
 </main>
 
 <footer class="footer">
-  Part of the <a href="https://circadia-lab.uk">Circadia Lab</a> ecosystem, built on
-  <a href="https://mrpheus.circadia-lab.uk">mrpheus</a> and <a href="https://hypnor.circadia-lab.uk">hypnoR</a>.
+  <p class="footer-made">
+    Made with <i class="bi bi-heart-fill footer-heart"></i> by the <a href="https://circadia-lab.uk">Circadia Lab</a>,
+    built on
+    <a href="https://mrpheus.circadia-lab.uk"><i class="bi bi-activity"></i>mrpheus</a> and
+    <a href="https://hypnor.circadia-lab.uk"><i class="bi bi-moon-stars-fill"></i>hypnoR</a>.
+  </p>
+  <p class="footer-license">
+    <i class="bi bi-file-earmark-text-fill"></i>Released under the
+    <a href="https://github.com/circadia-bio/hypnos/blob/main/LICENSE" target="_blank" rel="noopener">MIT License</a>
+    &middot; &copy; 2026 Lucas Fran&ccedil;a, Mario Leocadio-Miguel
+  </p>
+  <p class="footer-disclaimer">
+    <i class="bi bi-info-circle-fill"></i>
+    <span><strong>Disclaimer.</strong> Sleep stages are scored by the pre-trained
+    <a href="https://github.com/raphaelvallat/yasa" target="_blank" rel="noopener">YASA</a> model
+    (<a href="https://doi.org/10.7554/eLife.70092" target="_blank" rel="noopener">Vallat &amp; Walker, 2021, eLife</a>),
+    ported to R in mrpheus and used under its BSD 3-Clause licence. hypnos is independent of the YASA authors and
+    is not endorsed by them. Automatic staging can differ from manual scoring, and the markers shown here have not
+    been validated for clinical use. This is a research tool, not a medical device, and is not intended for
+    diagnosis or treatment.</span>
+  </p>
 </footer>
 
 <!-- Welcome screen (after NotedApp's onboarding) -->
