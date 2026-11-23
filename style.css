@@ -278,6 +278,114 @@ pre .err { color: var(--accent); }
 
 .plot { width: 100%; height: 200px; }
 
+/* Welcome screen (after NotedApp's onboarding) */
+.welcome-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 500;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.2rem;
+  background: rgba(1, 67, 112, 0.6);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.3s ease;
+}
+.welcome-overlay[hidden] { display: none; }
+.welcome-overlay.open { opacity: 1; pointer-events: all; }
+
+.welcome-card {
+  width: 100%;
+  max-width: 30rem;
+  max-height: calc(100vh - 2.4rem);
+  overflow-y: auto;
+  padding: 1.5rem 1.5rem 1.1rem;
+  background: color-mix(in srgb, var(--bg) 86%, transparent);
+  border: 1px solid var(--glass-border);
+  border-radius: 22px;
+  box-shadow: 0 12px 48px rgba(0, 0, 0, 0.25);
+  backdrop-filter: blur(16px) saturate(1.4);
+  -webkit-backdrop-filter: blur(16px) saturate(1.4);
+  transform: translateY(14px) scale(0.97);
+  transition: transform 0.3s ease;
+}
+.welcome-overlay.open .welcome-card { transform: none; }
+
+.wl-step[hidden] { display: none; }
+.wl-step h2 { font-size: 1.4rem; margin: 0 0 0.5rem; }
+.wl-step p { font-size: 0.82rem; line-height: 1.6; margin: 0 0 0.6rem; }
+.wl-center { text-align: center; }
+
+.wl-hexes { display: flex; justify-content: center; gap: 1.2rem; margin-bottom: 0.9rem; }
+.wl-hex {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.1rem;
+  width: 9.5rem;
+  color: var(--fg);
+  text-decoration: none !important;
+}
+.wl-hex img {
+  height: 6.4rem;
+  width: auto;
+  filter: drop-shadow(0 5px 10px rgba(1, 67, 112, 0.25));
+  transition: transform 0.3s ease;
+}
+.wl-hex:hover img { transform: translateY(-4px) rotate(-2deg); }
+.wl-hex strong { font-family: "Playfair Display", serif; font-size: 0.95rem; }
+.wl-hex small { font-size: 0.66rem; line-height: 1.3; color: var(--fg-soft); }
+
+.wl-box,
+.wl-list {
+  background: var(--glass);
+  border: 1px solid var(--glass-border);
+  border-radius: 14px;
+  padding: 0.7rem 0.9rem;
+  text-align: left;
+}
+.wl-box { display: flex; gap: 0.7rem; align-items: flex-start; font-size: 0.78rem; line-height: 1.5; }
+.wl-box .bi { color: var(--accent); font-size: 1.1rem; margin-top: 0.1rem; }
+.wl-list { display: flex; flex-direction: column; gap: 0.6rem; margin-top: 0.7rem; }
+.wl-row { display: flex; gap: 0.7rem; align-items: flex-start; font-size: 0.78rem; line-height: 1.5; }
+.wl-row > .bi { color: var(--accent); font-size: 1.05rem; flex-shrink: 0; margin-top: 0.1rem; }
+.wl-num {
+  flex-shrink: 0;
+  width: 1.35rem;
+  height: 1.35rem;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: var(--bg);
+  background: var(--accent);
+}
+
+.wl-dots { display: flex; gap: 0.5rem; justify-content: center; margin: 1.1rem 0 0.9rem; }
+.wl-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--rule); transition: background 0.2s, transform 0.2s; }
+.wl-dot.active { background: var(--accent); transform: scale(1.3); }
+
+.wl-actions { display: flex; justify-content: space-between; align-items: center; }
+.wl-skip {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--fg-soft);
+  padding: 0.4rem 0.2rem;
+  transition: color 0.15s;
+}
+.wl-skip:hover { color: var(--accent); }
+.btn.btn-primary { background: var(--accent); color: var(--bg); border-color: var(--accent); }
+.btn.btn-primary:hover { background: var(--accent); filter: brightness(1.08); }
+
 /* ── Buttons ────────────────────────────────────────────── */
 .actions { display: flex; gap: 0.75rem; flex-wrap: wrap; }
 

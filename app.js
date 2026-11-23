@@ -2,6 +2,7 @@
 // The EDF file is mounted into webR's virtual filesystem and never uploaded.
 
 import { WebR } from 'https://webr.r-wasm.org/latest/webr.mjs';
+import { initWelcome } from './welcome.js';
 
 // ── Config ────────────────────────────────────────────────────────────────
 const REPOS    = ['https://circadia-bio.r-universe.dev', 'https://repo.r-wasm.org'];
@@ -606,3 +607,5 @@ window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () 
     drawPlots(last, false).catch((err) => log(`Plot failed: ${err?.message ?? err}`, 'err'));
   }
 });
+
+initWelcome();
