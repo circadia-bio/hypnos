@@ -117,6 +117,23 @@ code {
 .brand:hover { text-decoration: none; }
 .brand img { height: 34px; width: auto; }
 
+/* Version and beta tag, next to the brand and in the footer */
+.ver { display: inline-flex; align-items: center; gap: 0.4rem; margin-left: 0.1rem; font-family: "Alice", Georgia, serif; font-weight: 400; }
+.ver-num { font-size: 0.62rem; letter-spacing: 0.02em; color: var(--fg-soft); }
+.ver-tag {
+  display: inline-block;
+  padding: 1px 7px;
+  border-radius: 999px;
+  font-size: 0.55rem;
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  line-height: 1.5;
+  color: var(--bg);
+  background: var(--accent);
+}
+.ver-tag[hidden] { display: none; }
+
 .nav-links { display: flex; align-items: center; gap: 1.4rem; font-size: 0.8rem; }
 
 .theme-toggle {
@@ -543,6 +560,9 @@ input:disabled { opacity: 0.5; cursor: not-allowed; }
 /* Footer content */
 .footer p { margin: 0; }
 .footer-made .bi { margin-right: 0.3em; }
+.footer .footer-version { display: flex; align-items: center; justify-content: center; gap: 0.4rem; margin-bottom: 0.45rem; font-size: 0.72rem; }
+.footer-version .bi { color: var(--accent); }
+.footer-version .ver-num { font-size: 0.72rem; }
 .footer-license { margin-top: 0.3rem !important; }
 .footer-license .bi { margin-right: 0.4em; color: var(--accent); }
 .footer-heart { color: var(--accent); margin: 0 0.15em; }
@@ -562,8 +582,13 @@ input:disabled { opacity: 0.5; cursor: not-allowed; }
 @media (max-width: 600px) {
   html { font-size: 16px; }
   .navbar { padding: 0.6rem 1rem; }
+  .brand .ver-num { display: none; }              /* keep the beta tag, drop the number, so the navbar fits */
   .nav-links { gap: 0.8rem; }
   /* Icons only on a phone, so the links and the toggle fit on one line */
   .nav-links a { font-size: 0; }
   .nav-links a .bi { font-size: 1.1rem; }
+}
+
+@media (max-width: 360px) {
+  .brand .ver { display: none; }                  /* no room beside the brand; the footer still shows it */
 }

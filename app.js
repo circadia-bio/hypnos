@@ -4,6 +4,7 @@
 import { initWelcome } from './welcome.js';
 import { initSettings } from './settings.js';
 import { initTheme } from './theme.js';
+import { VERSION, STAGE } from './version.js';
 import { readHeaderInfo, resolveChannels } from './channels.js';
 
 // ── Config ────────────────────────────────────────────────────────────────
@@ -721,6 +722,14 @@ initTheme(() => {
     drawPlots(last, false).catch((err) => log(`Plot failed: ${err?.message ?? err}`, 'err'));
   }
 });
+
+// Version and release stage, from version.js, wherever the page shows them
+document.querySelectorAll('[data-version]').forEach((el) => { el.textContent = `v${VERSION}`; });
+document.querySelectorAll('[data-stage]').forEach((el) => {
+  el.textContent = STAGE;
+  el.hidden = !STAGE;
+});
+if (!STAGE) document.querySelectorAll('.ver, .footer-version').forEach((el) => el.removeAttribute('title'));
 
 // What the Analysis settings pop-up needs to know
 initSettings({
