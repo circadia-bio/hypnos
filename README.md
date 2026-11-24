@@ -3,6 +3,7 @@
 **Standard polysomnography metrics from an EDF file, computed entirely in your browser.**
 
 [![Live app](https://img.shields.io/badge/app-hypnos.circadia--lab.uk-014370)](https://hypnos.circadia-lab.uk)
+[![Version](https://img.shields.io/badge/version-0.1.0%20beta-fc544a)](./version.js)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](./LICENSE)
 [![JavaScript](https://img.shields.io/badge/JavaScript-ES%20modules-F7DF1E)](https://developer.mozilla.org/docs/Web/JavaScript)
 [![webR](https://img.shields.io/badge/webR-0.6.0-276DC3)](https://docs.r-wasm.org/webr/latest/)
@@ -10,13 +11,15 @@
 
 <p align="center"><img src="logo.svg" width="140" alt="hypnos logo: a pocket watch swinging like a pendulum"></p>
 
+> **Beta.** hypnos is an early release. The markers have not been validated against manually scored hypnograms; see the Limitations section below.
+
 ---
 
 ## 📖 What is hypnos?
 
-hypnos is a web app for getting standard sleep metrics from a polysomnography (PSG) recording without installing anything. You select an EDF file, and the page returns the stage composition of the night, a hypnogram, a spectrogram of the EEG channel used for staging, and the usual sleep architecture markers.
+hypnos is a web app for getting standard sleep metrics from a polysomnography (PSG) recording without installing anything. You select an EDF file, and the page returns the stage composition of the night, a hypnogram, a spectrogram of the EEG channel used for staging, and the usual sleep markers.
 
-Everything runs in the browser. The recording is processed on your device and is never uploaded: there is no account and no server holding your data. The analysis is done by two R packages from the Circadia Lab ecosystem, [mrpheus](https://mrpheus.circadia-lab.uk) and [hypnoR](https://hypnor.circadia-lab.uk), running as WebAssembly through [webR](https://docs.r-wasm.org/webr/latest/).
+Everything runs in the browser. The recording is processed on your device and is never uploaded: there is no account and no server holding your data. The analysis is done by the Circadia Lab R package [mrpheus](https://mrpheus.circadia-lab.uk), running as WebAssembly through [webR](https://docs.r-wasm.org/webr/latest/).
 
 ---
 
@@ -24,25 +27,42 @@ Everything runs in the browser. The recording is processed on your device and is
 
 - 🔒 **Private by design** — the EDF is read and processed on the device. (The page itself loads webR, R packages, Plotly and fonts from CDNs; the recording is not sent anywhere.)
 - 📂 **Large files** — only the header and the EEG, EOG and EMG channels needed for staging are read, in slices, so a night-long file of several hundred MB is practical. A 786 MiB recording was reduced to 66 MB before reaching R.
-- 🛏️ **Automatic AASM staging** — each 30 s epoch is scored with the pre-trained [YASA](https://github.com/raphaelvallat/yasa) model through `mrpheus`.
-- 📊 **Stage composition** — minutes per stage across the night.
+- 🛏️ **Automatic AASM staging** — each 30 s epoch is scored with the pre-trained [YASA](https://github.com/raphaelvallat/yasa) model through `mrpheus`, using the classifier that matches the channels present.
+- 🧭 **Signal validity and analysis window** — epochs where the EEG is flat are not staged, and the markers are computed over a window that ends where the signal is lost for good. The window can be adjusted.
+- ⚙️ **Analysis settings** — choose the EEG, EOG and EMG channels from the file's own channel list, and set the analysis window by hand. A new window recomputes the markers instantly; a new channel runs the analysis again.
+- 📊 **Stage composition** — minutes per stage across the analysis window.
 - 📈 **Interactive hypnogram** — hover, zoom, pan and reset (Plotly).
 - 🌈 **Spectrogram** — power spectral density of the staging EEG channel, 0 to 30 Hz, with its time axis linked to the hypnogram.
-- 🩺 **Clinical markers** — total sleep time, time in bed, sleep efficiency, sleep onset latency, wake after sleep onset, REM and N3 latency, and stage percentages, from `hypnoR::compute_sleep_architecture()`.
-- 📤 **CSV export** — the markers and the hypnogram.
-- 🎨 **Circadia Lab design** — light and dark themes, a welcome screen on the first visit, and the same icon set as [circadia-lab.uk](https://circadia-lab.uk).
+- 🩺 **Clinical markers** — total sleep time, time in bed, sleep efficiency, sleep onset latency, wake after sleep onset, REM and N3 latency, and stage percentages.
+- 📤 **CSV export** — the markers (with the channel and window used) and the hypnogram (with signal state and window membership per epoch).
+- 🎨 **Circadia Lab design** — light and dark themes with a toggle, a welcome screen on the first visit, and the same icon set as [circadia-lab.uk](https://circadia-lab.uk).
 
 ---
 
 ## ⚙️ How it works
 
-1. **Channel extraction (JavaScript).** The EDF header is read and the first EEG, EOG and EMG channel labels are chosen. A reduced plain EDF holding only those signals is built from slices of the file and written to webR's in-memory filesystem.
+1. **Channel extraction (JavaScript).** The EDF header is read. The EEG channel defaults to a central derivation (C4, then C3, then Cz) when the file has one, otherwise the first channel that looks like EEG, and never an oximetry channel such as `SpO2`. EOG and EMG are the first labels matching `EOG|ROC|LOC` and `EMG|chin|Chin`. A reduced plain EDF holding only the chosen signals is built from slices of the file and written to webR's in-memory filesystem.
 2. **Ingestion.** `mrpheus::read_edf()` and `mrpheus::prepare_psg()` read the reduced file and segment it into 30 s epochs.
-3. **Features.** The YASA feature set is computed with mrpheus (`stage_epochs()`'s internal feature code, which applies its own 0.4 to 30 Hz bandpass and 100 Hz resample).
-4. **Prediction.** The bundled LightGBM model is evaluated in plain R (`analysis.R`). The WebAssembly build of the `lightgbm` package cannot be loaded in the browser, because it is compiled with threads. The R evaluation was checked against Python LightGBM 4.7.0 on the YASA reference features: the largest probability difference was 3.3e-16, with identical predicted stages.
-5. **Spectrogram and markers.** `mrpheus::compute_spectrogram()` and `hypnoR::compute_sleep_architecture()`.
+3. **Signal validity.** Each epoch of the EEG is classed as flat (more than half of its samples are one value), clipped (more than 0.1% of its samples sit on the channel's extremes) or ok. The automatic analysis window runs from the first epoch with a signal to the epoch before the first hour of consecutive flat epochs. This follows `psg_DLBP33N3.qmd` in the Greg_PSG analysis.
+4. **Features.** The YASA feature set is computed with mrpheus (`stage_epochs()`'s internal feature code, which applies its own 0.4 to 30 Hz bandpass and 100 Hz resample).
+5. **Prediction.** The LightGBM model that matches the channels present (EEG, EEG and EOG, EEG and EMG, or all three) is evaluated in plain R (`analysis.R`), on features rounded to single precision as YASA does. The WebAssembly build of the `lightgbm` package cannot be loaded in the browser, because it is compiled with threads. The R evaluation matched Python LightGBM 4.7.0 on all eight shipped models (largest probability difference 4.4e-16, identical predicted stages). Flat epochs are then set to not staged.
+6. **Spectrogram and markers.** `mrpheus::compute_spectrogram()`, with flat epochs left blank, and a base-R sleep summary over the analysis window.
 
 `preprocess_psg()` is not run: staging does its own filtering, and the full-night filters are very slow in WebAssembly.
+
+### The markers
+
+They follow the notebook's `sleep_summary()`. Epochs with no valid EEG inside the window count towards time in bed but towards no stage.
+
+| Marker | Definition |
+|--------|------------|
+| Time in bed | Length of the analysis window |
+| Total sleep time | Epochs staged N1, N2, N3 or REM |
+| Sleep efficiency | Total sleep time / time in bed |
+| Sleep onset latency | Window start to the first non-wake epoch |
+| Wake after sleep onset | Wake epochs from sleep onset to the **end of the window** |
+| REM and N3 latency | First REM or N3 epoch, from sleep onset |
+| Stage percentages | Minutes in the stage / total sleep time |
 
 ---
 
@@ -50,15 +70,19 @@ Everything runs in the browser. The recording is processed on your device and is
 
 ```
 hypnos/
-├── index.html        # page structure, welcome screen and footer
+├── index.html        # page structure, settings pop-up, welcome screen and footer
 ├── style.css         # Circadia styling, light and dark
-├── app.js            # webR boot, channel extraction, pipeline runner, plots
+├── app.js            # webR boot, pipeline runner, rendering, plots
+├── channels.js       # EDF header reading and default channel choice
+├── settings.js       # Analysis settings pop-up
+├── theme.js          # light and dark toggle
 ├── welcome.js        # welcome screen (first visit, remembered in localStorage)
-├── analysis.R        # pipeline stages run in webR, plus the pure-R LightGBM predictor
+├── version.js        # version number and release stage
+├── analysis.R        # pipeline stages run in webR, validity and window, pure-R LightGBM predictor
 ├── logo.svg          # logo
 ├── favicon.svg       # small-size logo: browser tab and navbar
-├── models/           # YASA staging model, used if the mrpheus WebAssembly build lacks it
-├── vendor/           # self-hosted Bootstrap Icons and the mrpheus and hypnoR hex logos
+├── models/           # YASA staging model, used only if the mrpheus WebAssembly build lacks it
+├── vendor/           # self-hosted Bootstrap Icons and the mrpheus hex logo
 ├── netlify.toml      # Netlify configuration (static site, headers)
 ├── LICENSE
 └── README.md
@@ -70,7 +94,16 @@ hypnos/
 
 ### Use it online
 
-Open [hypnos.circadia-lab.uk](https://hypnos.circadia-lab.uk), wait for the engine pill to read "ready", and select an EDF file. The first visit downloads R and its packages, which can take a minute or two.
+Open [hypnos.circadia-lab.uk](https://hypnos.circadia-lab.uk), wait for the engine pill to read "ready", and select an EDF file. The first visit downloads R and its packages, including the roughly 27 MB mrpheus package with its staging models, which can take a minute or two.
+
+### Adjusting the analysis
+
+Open **Analysis settings** under the file picker.
+
+- **Channels** — the lists show every signal in the file with its sampling rate. Pick a different EEG channel, or set EOG or EMG to None. Applying a new channel runs the analysis again.
+- **Analysis window** — Automatic, or Custom with a start and end in hours. Applying a new window recomputes the markers without re-staging. A note above the markers always states the channel and window used.
+
+If a recording has no valid EEG on the chosen channel, the page says so; choose another channel.
 
 ### Run it locally
 
@@ -92,10 +125,12 @@ hypnos is a static site with no build step. The repository includes a `netlify.t
 
 ## ⚠️ Limitations
 
-- **Automatic scoring.** Stages come from an automatic model and can differ from manual scoring. The markers have not been validated against manually scored hypnograms. Check them before relying on them.
-- **Channel choice.** The first channel whose label matches an EEG, EOG or EMG pattern is used. This can be a frontal derivation, whereas YASA was trained on central ones, and the patterns are loose (`O2` also matches `SpO2`).
+- **Beta; automatic scoring.** Stages come from an automatic model and can differ from manual scoring. The markers have not been validated against manually scored hypnograms. Check them before relying on them.
+- **One EEG channel.** Staging uses a single channel. An analysis that averages the probabilities of two channels (C3 and C4) can give different stages, and sleep onset and REM markers are the most sensitive to the difference.
+- **Channel choice.** The default is a central derivation when the file has one, but the patterns are label-based and no quality check compares channels. Use Analysis settings if the default is wrong for a file.
+- **Flat signal only.** Flat stretches are detected and excluded. Amplitude artefacts and other artefacts are not detected or removed.
+- **Wake after sleep onset** counts wake to the end of the analysis window, which can be larger than a definition that stops at the last sleep epoch.
 - **Files.** EDF and EDF+ recordings that are continuous. The annotations channel is dropped, and discontinuous EDF+D files are not supported.
-- **Artefacts.** Artefact epochs are not detected or excluded.
 - **Not a medical device.** hypnos is a research tool and is not intended for diagnosis or treatment. It is independent of the YASA authors and is not endorsed by them.
 
 ---
@@ -105,8 +140,7 @@ hypnos is a static site with no build step. The repository includes a `netlify.t
 | Component | Version | Purpose |
 |-----------|---------|---------|
 | [webR](https://docs.r-wasm.org/webr/latest/) | 0.6.0 (pinned) | R compiled to WebAssembly |
-| [mrpheus](https://mrpheus.circadia-lab.uk) | [r-universe](https://circadia-bio.r-universe.dev) | EDF ingestion, features, staging, spectrogram |
-| [hypnoR](https://hypnor.circadia-lab.uk) | [r-universe](https://circadia-bio.r-universe.dev) | Sleep architecture metrics |
+| [mrpheus](https://mrpheus.circadia-lab.uk) | 0.2.0 on [r-universe](https://circadia-bio.r-universe.dev) | EDF ingestion, features, staging models, spectrogram |
 | jsonlite | [repo.r-wasm.org](https://repo.r-wasm.org) | Passing results from R to the page |
 | [Plotly.js](https://plotly.com/javascript/) (cartesian bundle) | 2.35.2 | Interactive plots |
 | [Bootstrap Icons](https://icons.getbootstrap.com/) | 1.11.1 | Icons (self-hosted in `vendor/`) |
@@ -160,4 +194,4 @@ Copyright © Lucas França, Mario Leocadio-Miguel, 2026
 
 ---
 
-> **Third-party attribution:** The sleep staging model was originally trained as part of YASA (Vallat & Walker, *eLife*, 2021; [doi:10.7554/eLife.70092](https://doi.org/10.7554/eLife.70092)) and is used under YASA's BSD 3-Clause License with attribution. Bootstrap Icons are used under the MIT License.
+> **Third-party attribution:** The sleep staging models were originally trained as part of YASA (Vallat & Walker, *eLife*, 2021; [doi:10.7554/eLife.70092](https://doi.org/10.7554/eLife.70092)) and are used under YASA's BSD 3-Clause License with attribution. Bootstrap Icons are used under the MIT License.
