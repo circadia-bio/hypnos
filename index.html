@@ -46,6 +46,7 @@
       <input type="file" id="file-input" accept=".edf,.EDF" hidden>
     </label>
     <p class="note" id="file-note"></p>
+    <button class="btn" id="open-settings" type="button"><i class="bi bi-sliders"></i>Analysis settings</button>
   </section>
 
   <section class="card" id="status-card" hidden>
@@ -65,6 +66,7 @@
   <section class="card" id="markers-card" hidden>
     <h3><i class="bi bi-heart-pulse-fill"></i>Clinical markers</h3>
     <div class="markers" id="metrics-grid"></div>
+    <p class="note" id="window-note"></p>
   </section>
 
   </aside>
@@ -130,6 +132,44 @@
   </p>
 </footer>
 
+<!-- Analysis settings -->
+<div class="settings-overlay" id="settings-overlay" role="dialog" aria-modal="true" aria-labelledby="set-title" hidden>
+  <div class="settings-card">
+    <div class="set-head">
+      <h2 id="set-title"><i class="bi bi-sliders"></i>Analysis settings</h2>
+      <button class="set-x" id="set-close" type="button" aria-label="Close"><i class="bi bi-x-lg"></i></button>
+    </div>
+    <p class="note" id="set-file"></p>
+
+    <h3><i class="bi bi-diagram-3-fill"></i>Channels</h3>
+    <div class="set-grid">
+      <label for="set-eeg">EEG</label><select id="set-eeg"></select>
+      <label for="set-eog">EOG</label><select id="set-eog"></select>
+      <label for="set-emg">EMG</label><select id="set-emg"></select>
+    </div>
+    <p class="note">Staging uses one EEG channel. A central derivation (C4, C3 or Cz) is the default when the file has one. Changing a channel runs the analysis again.</p>
+
+    <h3><i class="bi bi-clock-history"></i>Analysis window</h3>
+    <div class="set-radios">
+      <label><input type="radio" name="win" id="set-win-auto" value="auto" checked> Automatic</label>
+      <label><input type="radio" name="win" id="set-win-custom" value="custom"> Custom</label>
+    </div>
+    <div class="set-window">
+      <label for="set-start">From</label><input type="number" id="set-start" step="0.05" min="0"><span>h</span>
+      <label for="set-end">to</label><input type="number" id="set-end" step="0.05" min="0"><span>h</span>
+    </div>
+    <p class="note" id="set-win-info"></p>
+    <p class="set-msg" id="set-msg" role="alert"></p>
+
+    <div class="set-actions">
+      <button class="wl-skip" id="set-reset" type="button">Reset to automatic</button>
+      <span class="set-spacer"></span>
+      <button class="wl-skip" id="set-cancel" type="button">Cancel</button>
+      <button class="btn btn-primary" id="set-apply" type="button">Apply</button>
+    </div>
+  </div>
+</div>
+
 <!-- Welcome screen (after NotedApp's onboarding) -->
 <div class="welcome-overlay" id="welcome-overlay" role="dialog" aria-modal="true" aria-labelledby="wl-title" hidden>
   <div class="welcome-card">
@@ -159,7 +199,7 @@
       <h2>How it works</h2>
       <div class="wl-list">
         <div class="wl-row"><span class="wl-num">1</span><span><strong>Pick an EDF file.</strong> Only the header and the EEG, EOG and EMG channels are read, so a night-long file of several hundred MB is fine.</span></div>
-        <div class="wl-row"><span class="wl-num">2</span><span><strong>R runs in your browser.</strong> mrpheus stages each 30 s epoch and hypnoR computes the sleep architecture, using R compiled to WebAssembly.</span></div>
+        <div class="wl-row"><span class="wl-num">2</span><span><strong>R runs in your browser.</strong> mrpheus stages each 30 s epoch, and the sleep summary is computed in R, using R compiled to WebAssembly.</span></div>
         <div class="wl-row"><span class="wl-num">3</span><span><strong>Explore and export.</strong> Zoom the plots, then download the markers or the hypnogram as CSV.</span></div>
       </div>
     </div>
@@ -178,7 +218,7 @@
       <h2>Before you start</h2>
       <div class="wl-list">
         <div class="wl-row"><i class="bi bi-cloud-arrow-down-fill"></i><span><strong>First load.</strong> The first visit downloads R and its packages, which can take a minute or two. You can read this while it loads.</span></div>
-        <div class="wl-row"><i class="bi bi-cpu-fill"></i><span><strong>Automatic scoring.</strong> Stages come from an automatic model (YASA) applied to the first EEG channel found, with EOG and EMG where present. Check them against a scored hypnogram before relying on them.</span></div>
+        <div class="wl-row"><i class="bi bi-cpu-fill"></i><span><strong>Automatic scoring.</strong> Stages come from an automatic model (YASA) applied to one EEG channel, a central derivation when the file has one, with EOG and EMG where present. Stretches where the EEG is flat are not staged and are left out of the markers. You can change the channels and the analysis window under Analysis settings. Check the stages against a scored hypnogram before relying on them.</span></div>
         <div class="wl-row"><i class="bi bi-file-earmark-binary-fill"></i><span><strong>Files.</strong> EDF and EDF+ recordings that are continuous.</span></div>
       </div>
     </div>

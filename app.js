@@ -3,11 +3,14 @@
 
 import { WebR } from 'https://webr.r-wasm.org/v0.6.0/webr.mjs';
 import { initWelcome } from './welcome.js';
+import { initSettings } from './settings.js';
+import { readHeaderInfo, resolveChannels } from './channels.js';
 
 // ── Config ────────────────────────────────────────────────────────────────
 const REPOS    = ['https://circadia-bio.r-universe.dev', 'https://repo.r-wasm.org'];
-const PACKAGES = ['mrpheus', 'hypnoR', 'jsonlite'];
+const PACKAGES = ['mrpheus', 'jsonlite'];
 const EDF_PATH = '/tmp/recording.edf';
+const EPOCH_S  = 30;
 
 const STAGES = ['W', 'REM', 'N1', 'N2', 'N3'];            // hypnogram order, top to bottom
 const STAGE_VAR = { W: '--st-w', REM: '--st-rem', N1: '--st-n1', N2: '--st-n2', N3: '--st-n3' };
@@ -64,18 +67,36 @@ let busy = false;
 let t0 = 0;
 let timer = null;
 
+let currentFile = null;   // the recording being analysed
+let fileInfo = null;      // its header: labels and sample rates
+let usedChannels = null;  // the channels the last run staged with
+const defaultSettings = () => ({ eeg: 'auto', eog: 'auto', emg: 'auto', window: 'auto', startH: null, endH: null });
+let settings = defaultSettings();
+
+// R string literal for a channel label, or NA when there is none
+const rStr = (v) => (v ? JSON.stringify(v) : 'NA_character_');
+
+// An analysis window the user set, as epoch numbers for R; empty means the automatic one
+function windowArgs() {
+  if (settings.window !== 'custom' || !Number.isFinite(settings.startH) || !Number.isFinite(settings.endH)) return '';
+  const first = Math.floor((settings.startH * 3600) / EPOCH_S + 1e-9) + 1;
+  const last = Math.floor((settings.endH * 3600) / EPOCH_S + 1e-9);
+  return `first = ${first}L, last = ${Math.max(first, last)}L`;
+}
+
 // Pipeline stages, run one at a time so each can be timed and reported here
 const PIPELINE = [
   ['Reading EDF header',          () => `hypnos_header("${EDF_PATH}")`],
   ['Loading channels',            () => `hypnos_read("${EDF_PATH}")`],
-  ['Segmenting epochs',           () => 'hypnos_segment()'],
+  ['Segmenting epochs',           (c) => `hypnos_segment(${rStr(c.eeg)}, ${rStr(c.eog)}, ${rStr(c.emg)})`],
+  ['Checking signal validity',    () => 'hypnos_validity()'],
   // preprocess_psg() omitted: stage_epochs() applies its own 0.4-30 Hz bandpass and
   // 100 Hz resample, and the full-night filtfilt passes are very slow in WASM.
   // Re-add (ideally after downsampling) when band power or event detection is added.
   ['Extracting staging features', () => 'hypnos_features()'],
   ['Predicting stages',           () => 'hypnos_predict()'],
   ['Computing spectrogram',       () => 'hypnos_spectrogram()'],
-  ['Computing sleep architecture', () => 'hypnos_metrics()'],
+  ['Computing sleep summary',     () => `hypnos_metrics(${windowArgs()})`],
 ];
 const STEP_TOTAL = PIPELINE.length + 1;   // +1 for channel extraction in JS
 
@@ -137,6 +158,12 @@ function download(name, text) {
   URL.revokeObjectURL(url);
 }
 
+// Run R code in a shelter and return the first string it gives back
+async function rcall(shelter, code) {
+  const res = await shelter.evalR(code);
+  return (await res.toJs()).values?.[0] ?? null;
+}
+
 // ── Engine ────────────────────────────────────────────────────────────────
 async function pumpOutput() {
   for (;;) {
@@ -161,7 +188,7 @@ async function boot() {
 
     // Fail loudly if anything mrpheus needs has no WASM build
     await webR.evalRVoid(`
-      need <- c("mrpheus", "hypnoR", "jsonlite", "Rcpp", "edfReader", "gsignal",
+      need <- c("mrpheus", "jsonlite", "Rcpp", "edfReader", "gsignal",
                 "pracma", "lightgbm", "fastICA", "dplyr", "tibble", "cli", "rlang")
       miss <- need[!nzchar(vapply(need, function(p) system.file(package = p), character(1)))]
       if (length(miss)) stop("Not installed in webR: ", paste(miss, collapse = ", "))
@@ -188,33 +215,6 @@ const enginePromise = boot();
 enginePromise.catch(() => {});
 
 // ── Analysis ──────────────────────────────────────────────────────────────
-// Read only the EDF header (a few KB) to pick the channels staging needs,
-// so R never has to hold the whole recording in memory.
-async function pickChannels(file) {
-  const dec = new TextDecoder('ascii');
-  const head = new Uint8Array(await file.slice(0, 256).arrayBuffer());
-  const ns = parseInt(dec.decode(head.slice(252, 256)), 10);
-  const sig = new Uint8Array(await file.slice(256, 256 + ns * 16).arrayBuffer());
-  const labels = [];
-  for (let i = 0; i < ns; i++) {
-    labels.push(dec.decode(sig.slice(i * 16, (i + 1) * 16)).trim());
-  }
-
-  // Same patterns and precedence as mrpheus::prepare_psg()
-  const rules = [
-    ['EEG', /EEG|C3|C4|F3|F4|O1|O2|Fpz|Pz/],
-    ['EOG', /EOG|ROC|LOC/],
-    ['EMG', /EMG|chin|Chin/],
-  ];
-  const chosen = {};
-  for (const label of labels) {
-    if (label.includes('Annotations')) continue;
-    const hit = rules.find(([, re]) => re.test(label));
-    if (hit && !chosen[hit[0]]) chosen[hit[0]] = label;
-  }
-  log(`Channels (${ns} in file): loading ${Object.values(chosen).join(', ') || 'none matched'}`);
-  return Object.values(chosen);
-}
 // Build a small EDF holding only the wanted channels. The source file is read
 // in slices, so the full recording is never held in memory.
 async function extractChannels(file, wanted) {
@@ -308,54 +308,14 @@ async function ensureModel(shelter) {
   log('mrpheus ships no YASA models here; using models/yasa_staging.txt (EEG + EOG + EMG only).');
 }
 
-async function analyse(file) {
+// Run a task with the page marked busy; report a failure in the status card and the log
+async function withBusy(task) {
   if (busy) return;
   busy = true;
   startTimer();
   dropzone.classList.add('disabled');
-  results.hidden = true;
-  $('#markers-card').hidden = true;
-  logEl.textContent = '';
-
-  fileNote.textContent = `${file.name} · ${(file.size / 1048576).toFixed(1)} MB · processed locally`;
-
   try {
-    setStatus('Waiting for the R engine');
-    await enginePromise;
-
-    setStatus('Analysing recording');
-    const channels = await pickChannels(file);
-    if (!channels.length) throw new Error('No EEG, EOG or EMG channel labels recognised in this file.');
-    const reduced = await extractChannels(file, channels);
-    log(`Reduced EDF: ${(reduced.length / 1048576).toFixed(0)} MB`);
-    await webR.FS.writeFile(EDF_PATH, reduced);
-    const shelter = await new webR.Shelter();
-    try {
-      await ensureModel(shelter);
-      let out = null;
-      for (const [i, [label, call]] of PIPELINE.entries()) {
-        setStatus(`Step ${i + 2} of ${STEP_TOTAL}: ${label}`);
-        setProgress((i + 1) / STEP_TOTAL);
-        const t = performance.now();
-        try {
-          const res = await shelter.evalR(call());
-          out = (await res.toJs()).values?.[0] ?? null;
-        } catch (err) {
-          throw new Error(`${label} failed: ${err?.message ?? err}`);
-        }
-        const secs = ((performance.now() - t) / 1000).toFixed(1);
-        const detail = i < PIPELINE.length - 1 && out ? `${out} ` : '';
-        log(`${label}: ${detail}[${secs} s]`);
-      }
-      last = JSON.parse(out);
-    } finally {
-      await shelter.purge();
-      try { await webR.FS.unlink(EDF_PATH); } catch { /* already gone */ }
-    }
-
-    render(last);
-    setStatus('Done', { working: false });
-    setProgress(1);
+    await task();
   } catch (err) {
     setStatus('Analysis failed', { working: false });
     log(String(err?.message ?? err), 'err');
@@ -366,8 +326,120 @@ async function analyse(file) {
   }
 }
 
+// A new recording: read its header, reset the settings, and analyse it
+function analyse(file) {
+  return withBusy(async () => {
+    results.hidden = true;
+    $('#markers-card').hidden = true;
+    last = null;
+    logEl.textContent = '';
+    setStatus('Reading the file header');
+
+    try {
+      fileInfo = await readHeaderInfo(file);
+    } catch (err) {
+      currentFile = null;
+      fileInfo = null;
+      throw err;
+    }
+    currentFile = file;
+    settings = defaultSettings();
+    fileNote.textContent = `${file.name} · ${(file.size / 1048576).toFixed(1)} MB · processed locally`;
+    await runPipeline();
+  });
+}
+
+// The full analysis of the current recording with the current channel and window settings
+async function runPipeline() {
+  results.hidden = true;
+  $('#markers-card').hidden = true;
+  logEl.textContent = '';
+
+  setStatus('Waiting for the R engine');
+  await enginePromise;
+
+  setStatus('Analysing recording');
+  const ch = resolveChannels(fileInfo, settings);
+  if (!ch.eeg) throw new Error('No EEG channel was recognised in this file. Choose one in Analysis settings.');
+  log(`Channels (${fileInfo.ns} in file): EEG ${ch.eeg}, EOG ${ch.eog ?? 'none'}, EMG ${ch.emg ?? 'none'}`);
+
+  const wanted = [...new Set([ch.eeg, ch.eog, ch.emg].filter(Boolean))];
+  const reduced = await extractChannels(currentFile, wanted);
+  log(`Reduced EDF: ${(reduced.length / 1048576).toFixed(0)} MB`);
+  await webR.FS.writeFile(EDF_PATH, reduced);
+
+  const shelter = await new webR.Shelter();
+  try {
+    await rcall(shelter, 'hypnos_reset()');           // free the previous run's data
+    await ensureModel(shelter);
+    let out = null;
+    for (const [i, [label, call]] of PIPELINE.entries()) {
+      setStatus(`Step ${i + 2} of ${STEP_TOTAL}: ${label}`);
+      setProgress((i + 1) / STEP_TOTAL);
+      const t = performance.now();
+      try {
+        out = await rcall(shelter, call(ch));
+      } catch (err) {
+        throw new Error(`${label} failed: ${err?.message ?? err}`);
+      }
+      const secs = ((performance.now() - t) / 1000).toFixed(1);
+      const detail = i < PIPELINE.length - 1 && out ? `${out} ` : '';
+      log(`${label}: ${detail}[${secs} s]`);
+    }
+    last = JSON.parse(out);
+    usedChannels = ch;
+    await rcall(shelter, 'hypnos_trim()');            // keep only what a new window needs
+  } finally {
+    await shelter.purge();
+    try { await webR.FS.unlink(EDF_PATH); } catch { /* already gone */ }
+  }
+
+  render(last);
+  setStatus('Done', { working: false });
+  setProgress(1);
+}
+
+// A new analysis window needs no new staging: recompute the markers from the stored stages
+function applyWindow(previous) {
+  return withBusy(async () => {
+    setStatus('Recomputing the markers for the new window');
+    setProgress(0.5);
+    const shelter = await new webR.Shelter();
+    try {
+      last = JSON.parse(await rcall(shelter, `hypnos_metrics(${windowArgs()})`));
+    } catch (err) {
+      settings = previous;                              // keep the window that works
+      throw new Error(`The window could not be applied: ${err?.message ?? err}`);
+    } finally {
+      await shelter.purge();
+    }
+    render(last, false);
+    setStatus('Done', { working: false });
+    setProgress(1);
+  });
+}
+
+// What the Analysis settings pop-up chose: a channel change runs the analysis again,
+// a window change only recomputes the markers
+async function applySettings(next) {
+  if (busy || !currentFile) return;
+  const previous = settings;
+  settings = { ...settings, ...next };
+  const channelsChanged = ['eeg', 'eog', 'emg'].some((k) => previous[k] !== settings[k]);
+  if (channelsChanged || !last) {
+    await withBusy(runPipeline);
+  } else {
+    await applyWindow(previous);
+  }
+}
+
 // ── Rendering ─────────────────────────────────────────────────────────────
-function render(data) {
+function windowHours(data) {
+  const epochH = data.recording.epoch_s / 3600;
+  return { start: (data.window.first - 1) * epochH, end: data.window.last * epochH };
+}
+
+function render(data, fresh = true) {
   // Metric cards
   const grid = $('#metrics-grid');
   grid.innerHTML = '';
@@ -383,32 +455,59 @@ function render(data) {
     grid.appendChild(card);
   }
 
-  // Stage composition
-  const total = STAGES.reduce((s, k) => s + (data.stage_min[k] ?? 0), 0);
+  // Which window and channel the numbers describe
+  const win = windowHours(data);
+  const totalH = data.recording.n_epochs * (data.recording.epoch_s / 3600);
+  const outside = totalH - (win.end - win.start);
+  const noSignal = data.no_signal_min ?? 0;
+  $('#window-note').textContent =
+    `${usedChannels?.eeg ? `Staged on ${usedChannels.eeg}. ` : ''}` +
+    `Analysis window ${win.start.toFixed(2)} to ${win.end.toFixed(2)} h ` +
+    `(${data.window.manual ? 'set manually' : 'automatic'}).` +
+    (outside > 0.005 ? ` ${outside.toFixed(2)} h outside it are left out.` : '') +
+    (noSignal > 0 ? ` ${Math.round(noSignal)} min inside it have no valid EEG and are not staged.` : '');
+
+  // Stage composition, over the analysis window
+  const total = STAGES.reduce((s, k) => s + (data.stage_min[k] ?? 0), 0) + noSignal;
   const bar = $('#stagebar');
   const legend = $('#stage-legend');
   bar.innerHTML = '';
   legend.innerHTML = '';
-  for (const s of ['W', 'N1', 'N2', 'N3', 'REM']) {
-    const mins = data.stage_min[s] ?? 0;
+  const addSegment = (color, mins, name) => {
     const seg = document.createElement('span');
     seg.style.width = `${total ? (mins / total) * 100 : 0}%`;
-    seg.style.background = `var(${STAGE_VAR[s]})`;
-    seg.title = `${STAGE_NAME[s]}: ${fmt(mins)} min`;
+    seg.style.background = color;
+    seg.title = `${name}: ${fmt(mins)} min`;
     bar.appendChild(seg);
 
     const item = document.createElement('span');
-    item.innerHTML = `<i style="background:var(${STAGE_VAR[s]})"></i>${STAGE_NAME[s]} ${fmt(mins)} min`;
+    item.innerHTML = `<i style="background:${color}"></i>${name} ${fmt(mins)} min`;
     legend.appendChild(item);
+  };
+  for (const s of ['W', 'N1', 'N2', 'N3', 'REM']) {
+    addSegment(`var(${STAGE_VAR[s]})`, data.stage_min[s] ?? 0, STAGE_NAME[s]);
   }
+  if (noSignal > 0) addSegment('var(--st-none)', noSignal, 'No valid EEG');
 
   results.hidden = false;
   $('#markers-card').hidden = false;
-  drawPlots(data, true).catch((err) => log(`Plot failed: ${err?.message ?? err}`, 'err'));
+  drawPlots(data, fresh).catch((err) => log(`Plot failed: ${err?.message ?? err}`, 'err'));
 }
 
 // ── Plots (Plotly) ────────────────────────────────────────────────────────
-function baseLayout(total) {
+// Shade what lies outside the analysis window
+function windowShapes(data) {
+  const win = windowHours(data);
+  const total = data.stages.length * (data.recording.epoch_s / 3600);
+  const base = { type: 'rect', xref: 'x', yref: 'paper', y0: 0, y1: 1, layer: 'above',
+                 fillcolor: 'rgba(120,120,120,0.3)', line: { width: 0 } };
+  const shapes = [];
+  if (win.start > 0) shapes.push({ ...base, x0: 0, x1: win.start });
+  if (win.end < total) shapes.push({ ...base, x0: win.end, x1: total });
+  return shapes;
+}
+
+function baseLayout(total, data) {
   const soft = cssVar('--fg-soft');
   const rule = cssVar('--rule');
   return {
@@ -425,6 +524,7 @@ function baseLayout(total) {
       bordercolor: rule,
       font: { family: 'Alice, serif', size: 11, color: cssVar('--fg') },
     },
+    shapes: windowShapes(data),
     xaxis: { range: [0, total], ticksuffix: ' h', gridcolor: rule, zeroline: false },
   };
 }
@@ -470,7 +570,7 @@ function drawHypnogram(data) {
     });
   }
 
-  const layout = baseLayout(n * epochH);
+  const layout = baseLayout(n * epochH, data);
   layout.yaxis = {
     tickmode: 'array',
     tickvals: STAGES.map((_, i) => i),
@@ -486,7 +586,8 @@ function drawHypnogram(data) {
 function drawSpectrogram(data) {
   const card = $('#spec-card');
   const sp = data.spectrogram;
-  if (!sp || !sp.power || !sp.power.length) {
+  const vals = sp?.power?.length ? sp.power.flat().filter(Number.isFinite).sort((a, b) => a - b) : [];
+  if (!vals.length) {
     card.hidden = true;
     return Promise.resolve();
   }
@@ -496,8 +597,7 @@ function drawSpectrogram(data) {
   const F = sp.freqs.length;
   const epochH = data.recording.epoch_s / 3600;
 
-  // Robust colour limits (2nd to 98th percentile)
-  const vals = sp.power.flat().filter(Number.isFinite).sort((a, b) => a - b);
+  // Robust colour limits (2nd to 98th percentile of the epochs that have a signal)
   const zmin = vals[Math.floor(vals.length * 0.02)];
   const zmax = vals[Math.floor(vals.length * 0.98)];
 
@@ -517,7 +617,7 @@ function drawSpectrogram(data) {
     },
   };
 
-  const layout = baseLayout(n * epochH);
+  const layout = baseLayout(n * epochH, data);
   layout.yaxis = {
     range: [sp.freqs[0], sp.freqs[F - 1]],
     ticksuffix: ' Hz',
@@ -527,7 +627,7 @@ function drawSpectrogram(data) {
 
   $('#spec-note').textContent =
     `${sp.channel}, power spectral density per epoch in dB. Colour range is the 2nd to 98th ` +
-    `percentile (${zmin.toFixed(0)} to ${zmax.toFixed(0)} dB).`;
+    `percentile (${zmin.toFixed(0)} to ${zmax.toFixed(0)} dB). Blank epochs have no valid EEG signal.`;
   return window.Plotly.react('spectrogram', [trace], layout, PLOT_CONFIG);
 }
 
@@ -592,15 +692,24 @@ dropzone.addEventListener('drop', (e) => {
 
 $('#dl-metrics').addEventListener('click', () => {
   if (!last) return;
-  const keys = Object.keys(last.metrics);
-  download('hypnos_metrics.csv', `${keys.join(',')}\n${keys.map((k) => last.metrics[k] ?? '').join(',')}\n`);
+  const win = windowHours(last);
+  const row = {
+    ...last.metrics,
+    eeg_channel: usedChannels?.eeg ?? '',
+    window_start_h: win.start.toFixed(4),
+    window_end_h: win.end.toFixed(4),
+  };
+  const keys = Object.keys(row);
+  download('hypnos_metrics.csv', `${keys.join(',')}\n${keys.map((k) => row[k] ?? '').join(',')}\n`);
 });
 
 $('#dl-hypnogram').addEventListener('click', () => {
   if (!last) return;
   const { epoch_s } = last.recording;
-  const rows = last.stages.map((s, i) => `${i + 1},${i * epoch_s},${s ?? ''}`);
-  download('hypnos_hypnogram.csv', `epoch,onset_s,stage\n${rows.join('\n')}\n`);
+  const { first, last: lastEpoch } = last.window;
+  const rows = last.stages.map((s, i) =>
+    `${i + 1},${i * epoch_s},${s ?? ''},${last.signal?.[i] ?? ''},${i + 1 >= first && i + 1 <= lastEpoch}`);
+  download('hypnos_hypnogram.csv', `epoch,onset_s,stage,signal,in_window\n${rows.join('\n')}\n`);
 });
 
 // Plotly resizes itself (responsive); only a theme change needs a redraw
@@ -608,6 +717,20 @@ window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () 
   if (last && !results.hidden) {
     drawPlots(last, false).catch((err) => log(`Plot failed: ${err?.message ?? err}`, 'err'));
   }
+});
+
+// What the Analysis settings pop-up needs to know
+initSettings({
+  getContext: () => ({
+    busy,
+    fileName: currentFile?.name ?? null,
+    info: fileInfo,
+    settings: { ...settings },
+    result: last
+      ? { nEpochs: last.recording.n_epochs, epochS: last.recording.epoch_s, window: last.window }
+      : null,
+  }),
+  apply: applySettings,
 });
 
 initWelcome();
