@@ -8,10 +8,12 @@
 
 # ── Pure-R LightGBM predictor ────────────────────────────────────────────────
 # The webR build of the lightgbm package cannot be loaded in the browser (it is
-# compiled with threads / shared memory). mrpheus ships the YASA staging model
-# as a LightGBM text dump, so it is evaluated here directly: walk each tree,
-# sum leaf values per class, softmax. Mirrors LightGBM's NumericalDecision().
-# Stopgap for hypnos only; mrpheus::stage_epochs() is untouched.
+# compiled with threads / shared memory). mrpheus ships the YASA staging models
+# as LightGBM text dumps (plain or gzip), so the model is evaluated here
+# directly: walk each tree, sum leaf values per class, softmax. Mirrors
+# LightGBM's NumericalDecision(). Stopgap for hypnos only; mrpheus::stage_epochs()
+# is untouched, and hypnos follows its choices (model per channel set, features
+# rounded to float32 as YASA does).
 
 .hypnos_parse_tree <- function(blk) {
   get <- function(key) {
@@ -37,8 +39,38 @@
   )
 }
 
+# Lines of a LightGBM text model, plain or gzip-compressed.
+.hypnos_read_lines <- function(path) {
+  con <- if (grepl("\\.gz$", path)) gzfile(path, "rt") else file(path, "rt")
+  on.exit(close(con))
+  readLines(con, warn = FALSE)
+}
+
+# Round doubles to the nearest IEEE single and return them as doubles, as numpy's
+# astype(np.float32) does. YASA rounds its features this way before predicting.
+.hypnos_as_float32 <- function(x) {
+  v <- as.numeric(x)
+  readBin(writeBin(v, raw(), size = 4L), what = "numeric", size = 4L, n = length(v))
+}
+
+# YASA classifier key for the channels present (mrpheus:::.yasa_model_key()).
+.hypnos_model_key <- function(has_eog, has_emg) {
+  paste0("eeg", if (has_eog) "_eog", if (has_emg) "_emg")
+}
+
+# The package's gzipped model for this key. The single yasa_staging.txt that hypnos
+# served before is the full EEG + EOG + EMG model, so it only stands in for that key.
+.hypnos_find_model <- function(key) {
+  path <- system.file("models", paste0("yasa_", key, ".txt.gz"), package = "mrpheus")
+  if (nzchar(path)) return(path)
+  if (identical(key, "eeg_eog_emg") && file.exists("/tmp/yasa_staging.txt")) return("/tmp/yasa_staging.txt")
+  root <- system.file(package = "mrpheus")
+  stop("YASA model for ", key, " not found. mrpheus ", as.character(utils::packageVersion("mrpheus")),
+       " models/ holds: [", paste(list.files(file.path(root, "models")), collapse = ", "), "]")
+}
+
 .hypnos_parse_model <- function(path) {
-  lines   <- readLines(path, warn = FALSE)
+  lines   <- .hypnos_read_lines(path)
   starts  <- which(startsWith(lines, "Tree="))
   end_at  <- which(lines == "end of trees")[1L]
   header  <- lines[seq_len(starts[1L] - 1L)]
@@ -124,26 +156,22 @@ hypnos_features <- function() {
   cm   <- psg$channel_map
   pick <- function(type) cm$label[cm$type == type & !cm$bad][1L]
   eeg <- pick("EEG"); eog <- pick("EOG"); emg <- pick("EMG")
+  .hypnos$channels <- list(eeg = eeg, eog = eog, emg = emg)
   .hypnos$features <- mrpheus:::.extract_staging_features(psg, eeg, eog, emg)
   paste0("EEG=", eeg, ", EOG=", eog, ", EMG=", emg, ", ",
          nrow(.hypnos$features), " epochs x ", ncol(.hypnos$features) - 1L, " features")
 }
 
 hypnos_predict <- function() {
-  path <- system.file("models", "yasa_staging.txt", package = "mrpheus")
-  if (!nzchar(path) && file.exists("/tmp/yasa_staging.txt")) path <- "/tmp/yasa_staging.txt"
-  if (!nzchar(path)) {
-    root <- system.file(package = "mrpheus")
-    stop("YASA staging model not found. mrpheus ", as.character(utils::packageVersion("mrpheus")),
-         " installs: ", paste(list.dirs(root, full.names = FALSE, recursive = FALSE), collapse = ", "),
-         "; models/ holds: [", paste(list.files(file.path(root, "models")), collapse = ", "), "]")
-  }
-  model <- .hypnos_parse_model(path)
+  ch  <- .hypnos$channels
+  key <- .hypnos_model_key(!is.na(ch$eog), !is.na(ch$emg))
+  model <- .hypnos_parse_model(.hypnos_find_model(key))
 
   feats   <- .hypnos$features
   missing <- setdiff(model$feature_names, names(feats))
   if (length(missing)) stop("Missing model features: ", paste(missing, collapse = ", "))
   X <- as.matrix(feats[, model$feature_names])
+  X[] <- .hypnos_as_float32(X)                     # YASA predicts on float32 features
 
   probs  <- .hypnos_predict_matrix(model, X)
   labels <- c("N1", "N2", "N3", "REM", "W")      # alphabetical, as in stage_epochs()
@@ -153,7 +181,7 @@ hypnos_predict <- function() {
   .hypnos$stages <- tibble::as_tibble(cbind(
     data.frame(epoch = feats$epoch, stage = stage), probs
   ))
-  paste0(length(model$trees), " trees; ",
+  paste0("classifier ", key, ", ", length(model$trees), " trees; ",
          paste0(names(table(stage)), "=", as.integer(table(stage)), collapse = ", "))
 }
 

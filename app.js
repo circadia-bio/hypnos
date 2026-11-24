@@ -292,18 +292,20 @@ async function extractChannels(file, wanted) {
   return out;
 }
 
-// If the WASM build of mrpheus lacks the staging model, use a copy served beside
-// the page (models/yasa_staging.txt) when one exists.
+// If the WASM build of mrpheus ships no YASA models, use the full EEG + EOG + EMG model
+// served beside the page (models/yasa_staging.txt) when one exists.
 async function ensureModel(shelter) {
-  const has = await shelter.evalR('nzchar(system.file("models", "yasa_staging.txt", package = "mrpheus"))');
+  const has = await shelter.evalR(
+    'length(list.files(system.file("models", package = "mrpheus"), pattern = "^yasa_.*[.]txt[.]gz$")) > 0'
+  );
   if ((await has.toJs()).values[0]) return;
   const r = await fetch('models/yasa_staging.txt', { cache: 'no-store' });
   if (!r.ok) {
-    log('Staging model is not in the mrpheus package and models/yasa_staging.txt was not found.');
+    log('mrpheus ships no YASA models here and models/yasa_staging.txt was not found.');
     return;
   }
   await webR.FS.writeFile('/tmp/yasa_staging.txt', new Uint8Array(await r.arrayBuffer()));
-  log('Using models/yasa_staging.txt (not found in the mrpheus package).');
+  log('mrpheus ships no YASA models here; using models/yasa_staging.txt (EEG + EOG + EMG only).');
 }
 
 async function analyse(file) {
