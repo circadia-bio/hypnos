@@ -6,6 +6,7 @@ import { initSettings } from './settings.js';
 import { initTheme } from './theme.js';
 import { VERSION, STAGE } from './version.js';
 import { readHeaderInfo, resolveChannels } from './channels.js';
+import { extractChannels } from './edf.js';
 
 // ── Config ────────────────────────────────────────────────────────────────
 const WEBR_URL = 'https://webr.r-wasm.org/v0.6.0/webr.mjs';   // loaded in boot(), so the page works if it cannot be reached
@@ -218,83 +219,6 @@ const enginePromise = boot();
 enginePromise.catch(() => {});
 
 // ── Analysis ──────────────────────────────────────────────────────────────
-// Build a small EDF holding only the wanted channels. The source file is read
-// in slices, so the full recording is never held in memory.
-async function extractChannels(file, wanted) {
-  const dec = new TextDecoder('ascii');
-  const num = (bytes) => parseInt(dec.decode(bytes), 10);
-  const put = (buf, off, str, len) => {
-    for (let i = 0; i < len; i++) buf[off + i] = i < str.length ? str.charCodeAt(i) : 32;
-  };
-
-  const head = new Uint8Array(await file.slice(0, 256).arrayBuffer());
-  const ns = num(head.slice(252, 256));
-  const sigHdr = new Uint8Array(await file.slice(256, 256 + ns * 256).arrayBuffer());
-
-  // Per-signal header fields: label, transducer, physical dim, phys min/max,
-  // digital min/max, prefilter, samples per record, reserved.
-  const W = [16, 80, 8, 8, 8, 8, 8, 80, 8, 32];
-  const start = [];
-  for (let f = 0, acc = 0; f < W.length; f++) { start.push(acc); acc += W[f] * ns; }
-  const field = (f, i) => sigHdr.subarray(start[f] + i * W[f], start[f] + (i + 1) * W[f]);
-
-  const labels = Array.from({ length: ns }, (_, i) => dec.decode(field(0, i)).trim());
-  const rec = Array.from({ length: ns }, (_, i) => num(field(8, i)) * 2);   // bytes per record
-  const recOff = [];
-  let recBytes = 0;
-  for (const b of rec) { recOff.push(recBytes); recBytes += b; }
-
-  const idx = wanted.map((l) => labels.indexOf(l)).filter((i) => i >= 0);
-  const k = idx.length;
-
-  const hdrBytes = 256 + ns * 256;
-  let nRec = num(head.slice(236, 244));
-  const fits = Math.floor((file.size - hdrBytes) / recBytes);
-  if (!(nRec > 0) || nRec > fits) nRec = fits;
-
-  const newHdrBytes = 256 + k * 256;
-  const newRecBytes = idx.reduce((s, i) => s + rec[i], 0);
-  const outSize = newHdrBytes + nRec * newRecBytes;
-  if (outSize > 900 * 1048576) {
-    throw new Error(`Selected channels need ${(outSize / 1048576).toFixed(0)} MB, too large for the browser.`);
-  }
-  const out = new Uint8Array(outSize);
-
-  // Fixed header, rewritten as a plain EDF with k signals
-  out.set(head, 0);
-  put(out, 0, '0', 8);
-  put(out, 184, String(newHdrBytes), 8);
-  put(out, 192, '', 44);
-  put(out, 236, String(nRec), 8);
-  put(out, 252, String(k), 4);
-
-  // Signal header, selected signals only
-  for (let f = 0, acc = 0; f < W.length; f++) {
-    idx.forEach((src, j) => out.set(field(f, src), 256 + acc + j * W[f]));
-    acc += W[f] * k;
-  }
-
-  // Data records
-  const perChunk = Math.max(1, Math.floor((32 * 1048576) / recBytes));
-  let pos = newHdrBytes;
-  for (let r0 = 0; r0 < nRec; r0 += perChunk) {
-    const n = Math.min(perChunk, nRec - r0);
-    const from = hdrBytes + r0 * recBytes;
-    const chunk = new Uint8Array(await file.slice(from, from + n * recBytes).arrayBuffer());
-    for (let r = 0; r < n; r++) {
-      const base = r * recBytes;
-      for (const i of idx) {
-        out.set(chunk.subarray(base + recOff[i], base + recOff[i] + rec[i]), pos);
-        pos += rec[i];
-      }
-    }
-    const pct = (r0 + n) / nRec;
-    setStatus(`Step 1 of ${STEP_TOTAL}: Extracting channels ${Math.round(pct * 100)}%`);
-    setProgress(pct / STEP_TOTAL);
-  }
-  return out;
-}
-
 // If the WASM build of mrpheus ships no YASA models, use the full EEG + EOG + EMG model
 // served beside the page (models/yasa_staging.txt) when one exists.
 async function ensureModel(shelter) {
@@ -367,7 +291,12 @@ async function runPipeline() {
   log(`Channels (${fileInfo.ns} in file): EEG ${ch.eeg}, EOG ${ch.eog ?? 'none'}, EMG ${ch.emg ?? 'none'}`);
 
   const wanted = [...new Set([ch.eeg, ch.eog, ch.emg].filter(Boolean))];
-  const reduced = await extractChannels(currentFile, wanted);
+  const reduced = await extractChannels(currentFile, wanted, {
+    onProgress: (pct) => {
+      setStatus(`Step 1 of ${STEP_TOTAL}: Extracting channels ${Math.round(pct * 100)}%`);
+      setProgress(pct / STEP_TOTAL);
+    },
+  });
   log(`Reduced EDF: ${(reduced.length / 1048576).toFixed(0)} MB`);
   await webR.FS.writeFile(EDF_PATH, reduced);
 
