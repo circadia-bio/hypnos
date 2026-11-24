@@ -6,6 +6,10 @@
   <title>hypnos · PSG metrics in your browser</title>
   <meta name="description" content="Select an EDF file and get standard polysomnography metrics. Everything runs in your browser; no data leaves your device.">
   <link rel="icon" type="image/svg+xml" href="favicon.svg">
+  <script>
+    /* Apply a saved light or dark choice before the first paint, so there is no flash */
+    try { var t = localStorage.getItem('hypnos_theme'); if (t === 'light' || t === 'dark') document.documentElement.dataset.theme = t; } catch (e) {}
+  </script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Alice&family=Playfair+Display:wght@600;700&display=swap" rel="stylesheet">
@@ -15,10 +19,13 @@
 <body>
 
 <nav class="navbar">
-  <a class="brand" href="./">
-    <img src="favicon.svg" alt="" onerror="this.remove()">
-    <span>hypnos</span>
-  </a>
+  <div class="nav-left">
+    <button class="theme-toggle" id="theme-toggle" type="button" title="Toggle dark mode" aria-label="Toggle dark mode" aria-pressed="false"><i class="bi bi-toggle-off"></i></button>
+    <a class="brand" href="./">
+      <img src="favicon.svg" alt="" onerror="this.remove()">
+      <span>hypnos</span>
+    </a>
+  </div>
   <div class="nav-links">
     <a href="#" id="open-welcome"><i class="bi bi-info-circle-fill"></i>About</a>
     <a href="https://circadia-lab.uk"><i class="bi bi-house-fill"></i>Circadia</a>

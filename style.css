@@ -19,8 +19,13 @@
   --st-n3: #014370;
 }
 
+:root { color-scheme: light dark; }
+:root[data-theme="light"] { color-scheme: light; }
+:root[data-theme="dark"] { color-scheme: dark; }
+
+/* Dark: the system setting, unless the visitor chose light with the toggle ... */
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-theme="light"]) {
     --bg: #014370;
     --fg: #ffa75d;
     --fg-soft: color-mix(in srgb, #ffa75d 80%, #014370);
@@ -36,6 +41,24 @@
     --st-n2: #9bdfe2;
     --st-n3: #4fa3d1;
   }
+}
+
+/* ... or dark because the visitor chose it (same values) */
+:root[data-theme="dark"] {
+  --bg: #014370;
+  --fg: #ffa75d;
+  --fg-soft: color-mix(in srgb, #ffa75d 80%, #014370);
+  --accent: #9bdfe2;
+  --glass: rgba(1, 67, 112, 0.45);
+  --glass-strong: rgba(1, 67, 112, 0.7);
+  --glass-border: rgba(155, 223, 226, 0.15);
+  --shadow: rgba(0, 0, 0, 0.3);
+  --rule: rgba(155, 223, 226, 0.2);
+  --st-w: #ffa75d;
+  --st-rem: #fc544a;
+  --st-n1: #ffecd4;
+  --st-n2: #9bdfe2;
+  --st-n3: #4fa3d1;
 }
 
 * { box-sizing: border-box; }
@@ -95,6 +118,21 @@ code {
 .brand img { height: 34px; width: auto; }
 
 .nav-links { display: flex; gap: 1.4rem; font-size: 0.8rem; }
+
+.nav-left { display: flex; align-items: center; gap: 0.9rem; }
+.theme-toggle {
+  background: none;
+  border: none;
+  padding: 0.15rem 0.3rem;
+  cursor: pointer;
+  color: var(--fg);
+  font-size: 1.35rem;
+  line-height: 1;
+  border-radius: 8px;
+  transition: color 0.15s;
+}
+.theme-toggle:hover { color: var(--accent); }
+.theme-toggle:focus-visible { outline: 2px solid color-mix(in srgb, var(--accent) 60%, transparent); outline-offset: 2px; }
 
 /* Icons (Bootstrap Icons, as on circadia-lab.uk) */
 .bi { vertical-align: -0.125em; }
@@ -391,7 +429,8 @@ pre .err { color: var(--accent); }
 
 /* Analysis settings pop-up */
 :root { --st-none: rgba(120, 120, 120, 0.4); --plot-text: rgba(27, 103, 153, 0.8); }
-@media (prefers-color-scheme: dark) { :root { --plot-text: rgba(255, 167, 93, 0.85); } }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --plot-text: rgba(255, 167, 93, 0.85); } }
+:root[data-theme="dark"] { --plot-text: rgba(255, 167, 93, 0.85); }
 
 #open-settings { margin-top: 0.7rem; width: 100%; justify-content: center; }
 
@@ -419,7 +458,6 @@ pre .err { color: var(--accent); }
   max-height: calc(100vh - 2.4rem);
   overflow-y: auto;
   padding: 1.3rem 1.5rem 1rem;
-  color-scheme: light dark;
   background: color-mix(in srgb, var(--bg) 90%, transparent);
   border: 1px solid var(--glass-border);
   border-radius: 22px;

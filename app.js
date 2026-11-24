@@ -1,12 +1,13 @@
 // hypnos — client-side PSG metrics via webR (R compiled to WebAssembly).
 // The EDF file is mounted into webR's virtual filesystem and never uploaded.
 
-import { WebR } from 'https://webr.r-wasm.org/v0.6.0/webr.mjs';
 import { initWelcome } from './welcome.js';
 import { initSettings } from './settings.js';
+import { initTheme } from './theme.js';
 import { readHeaderInfo, resolveChannels } from './channels.js';
 
 // ── Config ────────────────────────────────────────────────────────────────
+const WEBR_URL = 'https://webr.r-wasm.org/v0.6.0/webr.mjs';   // loaded in boot(), so the page works if it cannot be reached
 const REPOS    = ['https://circadia-bio.r-universe.dev', 'https://repo.r-wasm.org'];
 const PACKAGES = ['mrpheus', 'jsonlite'];
 const EDF_PATH = '/tmp/recording.edf';
@@ -179,6 +180,7 @@ async function boot() {
     setStatus('Preparing the R engine (first load downloads packages)');
     setProgress(0.03);
     startTimer();
+    const { WebR } = await import(WEBR_URL);
     webR = new WebR();
     await webR.init();
     pumpOutput();
@@ -712,8 +714,9 @@ $('#dl-hypnogram').addEventListener('click', () => {
   download('hypnos_hypnogram.csv', `epoch,onset_s,stage,signal,in_window\n${rows.join('\n')}\n`);
 });
 
-// Plotly resizes itself (responsive); only a theme change needs a redraw
-window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
+// Plotly resizes itself (responsive); only a theme change needs a redraw. The theme module
+// calls this when the visitor uses the toggle or, before they have chosen, the system changes.
+initTheme(() => {
   if (last && !results.hidden) {
     drawPlots(last, false).catch((err) => log(`Plot failed: ${err?.message ?? err}`, 'err'));
   }
