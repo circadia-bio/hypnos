@@ -19,7 +19,7 @@
 
 hypnos is a web app for getting standard sleep metrics from a polysomnography (PSG) recording without installing anything. You select an EDF file, and the page returns the stage composition of the night, a hypnogram, a spectrogram of the EEG channel used for staging, and the usual sleep markers.
 
-Everything runs in the browser. The recording is processed on your device and is never uploaded: there is no account and no server holding your data. The analysis is done by the Circadia Lab R package [mrpheus](https://mrpheus.circadia-lab.uk), running as WebAssembly through [webR](https://docs.r-wasm.org/webr/latest/).
+Everything runs in the browser. The recording is processed on your device and is never uploaded: there is no account and no server holding your data. The analysis is done by two R packages from the Circadia Lab ecosystem, [mrpheus](https://mrpheus.circadia-lab.uk) and [hypnoR](https://hypnor.circadia-lab.uk), running as WebAssembly through [webR](https://docs.r-wasm.org/webr/latest/).
 
 ---
 
@@ -33,7 +33,7 @@ Everything runs in the browser. The recording is processed on your device and is
 - 📊 **Stage composition** — minutes per stage across the analysis window.
 - 📈 **Interactive hypnogram** — hover, zoom, pan and reset (Plotly).
 - 🌈 **Spectrogram** — power spectral density of the staging EEG channel, 0 to 30 Hz, with its time axis linked to the hypnogram.
-- 🩺 **Clinical markers** — total sleep time, time in bed, sleep efficiency, sleep onset latency, wake after sleep onset, REM and N3 latency, and stage percentages.
+- 🩺 **Clinical markers** — total sleep time, time in bed, sleep efficiency, sleep onset latency, wake after sleep onset, REM and N3 latency, and stage percentages, from `hypnoR::compute_sleep_architecture()`.
 - 📤 **CSV export** — the markers (with the channel and window used) and the hypnogram (with signal state and window membership per epoch).
 - 🎨 **Circadia Lab design** — light and dark themes with a toggle, a welcome screen on the first visit, and the same icon set as [circadia-lab.uk](https://circadia-lab.uk).
 
@@ -46,13 +46,13 @@ Everything runs in the browser. The recording is processed on your device and is
 3. **Signal validity.** Each epoch of the EEG is classed as flat (more than half of its samples are one value), clipped (more than 0.1% of its samples sit on the channel's extremes) or ok. The automatic analysis window runs from the first epoch with a signal to the epoch before the first hour of consecutive flat epochs. This follows `psg_DLBP33N3.qmd` in the Greg_PSG analysis.
 4. **Features.** The YASA feature set is computed with mrpheus (`stage_epochs()`'s internal feature code, which applies its own 0.4 to 30 Hz bandpass and 100 Hz resample).
 5. **Prediction.** The LightGBM model that matches the channels present (EEG, EEG and EOG, EEG and EMG, or all three) is evaluated in plain R (`analysis.R`), on features rounded to single precision as YASA does. The WebAssembly build of the `lightgbm` package cannot be loaded in the browser, because it is compiled with threads. The R evaluation matched Python LightGBM 4.7.0 on all eight shipped models (largest probability difference 4.4e-16, identical predicted stages). Flat epochs are then set to not staged.
-6. **Spectrogram and markers.** `mrpheus::compute_spectrogram()`, with flat epochs left blank, and a base-R sleep summary over the analysis window.
+6. **Spectrogram and markers.** `mrpheus::compute_spectrogram()`, with flat epochs left blank, and `hypnoR::compute_sleep_architecture()` over the analysis window.
 
 `preprocess_psg()` is not run: staging does its own filtering, and the full-night filters are very slow in WebAssembly.
 
 ### The markers
 
-They follow the notebook's `sleep_summary()`. Epochs with no valid EEG inside the window count towards time in bed but towards no stage.
+They come from `hypnoR::compute_sleep_architecture(waso_until = "end")` on the hypnogram of the analysis window, and reproduce the notebook's `sleep_summary()`. Epochs with no valid EEG inside the window are unscored (`NA`): they count towards time in bed but towards no stage. hypnoR's default WASO stops at the last sleep epoch; hypnos asks for the end of the window. The note above the markers says which engine produced them. `waso_until` and the handling of unscored epochs are newer than hypnoR 0.1.1; if the installed hypnoR predates them, hypnos uses an equivalent built-in function and the note says so.
 
 | Marker | Definition |
 |--------|------------|
@@ -82,7 +82,7 @@ hypnos/
 ├── logo.svg          # logo
 ├── favicon.svg       # small-size logo: browser tab and navbar
 ├── models/           # YASA staging model, used only if the mrpheus WebAssembly build lacks it
-├── vendor/           # self-hosted Bootstrap Icons and the mrpheus hex logo
+├── vendor/           # self-hosted Bootstrap Icons and the mrpheus and hypnoR hex logos
 ├── netlify.toml      # Netlify configuration (static site, headers)
 ├── LICENSE
 └── README.md
@@ -129,7 +129,7 @@ hypnos is a static site with no build step. The repository includes a `netlify.t
 - **One EEG channel.** Staging uses a single channel. An analysis that averages the probabilities of two channels (C3 and C4) can give different stages, and sleep onset and REM markers are the most sensitive to the difference.
 - **Channel choice.** The default is a central derivation when the file has one, but the patterns are label-based and no quality check compares channels. Use Analysis settings if the default is wrong for a file.
 - **Flat signal only.** Flat stretches are detected and excluded. Amplitude artefacts and other artefacts are not detected or removed.
-- **Wake after sleep onset** counts wake to the end of the analysis window, which can be larger than a definition that stops at the last sleep epoch.
+- **Wake after sleep onset** counts wake to the end of the analysis window (`waso_until = "end"`), which can be larger than hypnoR's default definition, which stops at the last sleep epoch.
 - **Files.** EDF and EDF+ recordings that are continuous. The annotations channel is dropped, and discontinuous EDF+D files are not supported.
 - **Not a medical device.** hypnos is a research tool and is not intended for diagnosis or treatment. It is independent of the YASA authors and is not endorsed by them.
 
@@ -141,6 +141,7 @@ hypnos is a static site with no build step. The repository includes a `netlify.t
 |-----------|---------|---------|
 | [webR](https://docs.r-wasm.org/webr/latest/) | 0.6.0 (pinned) | R compiled to WebAssembly |
 | [mrpheus](https://mrpheus.circadia-lab.uk) | 0.2.0 on [r-universe](https://circadia-bio.r-universe.dev) | EDF ingestion, features, staging models, spectrogram |
+| [hypnoR](https://hypnor.circadia-lab.uk) | [r-universe](https://circadia-bio.r-universe.dev); needs `waso_until` (added after 0.1.1) | Sleep summary |
 | jsonlite | [repo.r-wasm.org](https://repo.r-wasm.org) | Passing results from R to the page |
 | [Plotly.js](https://plotly.com/javascript/) (cartesian bundle) | 2.35.2 | Interactive plots |
 | [Bootstrap Icons](https://icons.getbootstrap.com/) | 1.11.1 | Icons (self-hosted in `vendor/`) |

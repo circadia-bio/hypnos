@@ -186,6 +186,28 @@
   )
 }
 
+# The sleep summary. hypnoR computes it when the installed version can: it handles unscored (NA)
+# epochs and has `waso_until`, both added after hypnoR 0.1.1. Otherwise the equivalent
+# function above is used, so the page works before and after hypnoR is updated.
+.hypnos_summary <- function(stage, epoch_s = 30) {
+  if (!requireNamespace("hypnoR", quietly = TRUE)) {
+    return(list(metrics = .hypnos_sleep_summary(stage, epoch_s), engine = "built-in (hypnoR not installed)"))
+  }
+  if (!"waso_until" %in% names(formals(hypnoR::compute_sleep_architecture))) {
+    return(list(metrics = .hypnos_sleep_summary(stage, epoch_s), engine = "built-in (installed hypnoR is older)"))
+  }
+  hyp  <- hypnoR::new_hypnogram(
+    data.frame(epoch = seq_along(stage), stage = stage, stringsAsFactors = FALSE),
+    epoch_sec = epoch_s, resolution = "aasm"
+  )
+  arch <- hypnoR::compute_sleep_architecture(hyp, waso_until = "end")
+  keep <- c("tst_min", "tib_min", "se_pct", "sol_min", "waso_min", "rem_lat_min", "sws_lat_min",
+            "pct_n1", "pct_n2", "pct_n3", "pct_rem")
+  metrics <- as.list(arch[1L, keep])
+  metrics$no_signal_epochs <- as.integer(round(arch$unscored_min * 60 / epoch_s))
+  list(metrics = metrics, engine = paste0("hypnoR ", as.character(utils::packageVersion("hypnoR"))))
+}
+
 # Exact-match regex for a channel label, so prepare_psg() types the channel the user
 # chose however it is named (its defaults would read "SpO2" as EEG, because of "O2").
 .hypnos_exact <- function(label) {
@@ -312,7 +334,8 @@ hypnos_metrics <- function(first = NULL, last = NULL, epoch_s = 30) {
 
   stage_chr <- as.character(stages$stage)
   in_win    <- stage_chr[idx]
-  summ      <- .hypnos_sleep_summary(in_win, epoch_s)
+  res       <- .hypnos_summary(in_win, epoch_s)
+  summ      <- res$metrics
   stage_min <- vapply(c("W", "N1", "N2", "N3", "REM"),
                       function(s) sum(in_win == s, na.rm = TRUE) * epoch_s / 60, numeric(1))
 
@@ -326,6 +349,7 @@ hypnos_metrics <- function(first = NULL, last = NULL, epoch_s = 30) {
     window = list(first = w[["first"]], last = w[["last"]],
                   auto_first = auto[["first"]], auto_last = auto[["last"]], manual = manual),
     metrics       = summ,
+    summary_engine = res$engine,
     stage_min     = as.list(stage_min),
     no_signal_min = summ$no_signal_epochs * epoch_s / 60,
     signal        = .hypnos$state,

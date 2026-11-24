@@ -10,7 +10,7 @@ import { readHeaderInfo, resolveChannels } from './channels.js';
 // ── Config ────────────────────────────────────────────────────────────────
 const WEBR_URL = 'https://webr.r-wasm.org/v0.6.0/webr.mjs';   // loaded in boot(), so the page works if it cannot be reached
 const REPOS    = ['https://circadia-bio.r-universe.dev', 'https://repo.r-wasm.org'];
-const PACKAGES = ['mrpheus', 'jsonlite'];
+const PACKAGES = ['mrpheus', 'hypnoR', 'jsonlite'];
 const EDF_PATH = '/tmp/recording.edf';
 const EPOCH_S  = 30;
 
@@ -191,7 +191,7 @@ async function boot() {
 
     // Fail loudly if anything mrpheus needs has no WASM build
     await webR.evalRVoid(`
-      need <- c("mrpheus", "jsonlite", "Rcpp", "edfReader", "gsignal",
+      need <- c("mrpheus", "hypnoR", "jsonlite", "Rcpp", "edfReader", "gsignal",
                 "pracma", "lightgbm", "fastICA", "dplyr", "tibble", "cli", "rlang")
       miss <- need[!nzchar(vapply(need, function(p) system.file(package = p), character(1)))]
       if (length(miss)) stop("Not installed in webR: ", paste(miss, collapse = ", "))
@@ -468,7 +468,8 @@ function render(data, fresh = true) {
     `Analysis window ${win.start.toFixed(2)} to ${win.end.toFixed(2)} h ` +
     `(${data.window.manual ? 'set manually' : 'automatic'}).` +
     (outside > 0.005 ? ` ${outside.toFixed(2)} h outside it are left out.` : '') +
-    (noSignal > 0 ? ` ${Math.round(noSignal)} min inside it have no valid EEG and are not staged.` : '');
+    (noSignal > 0 ? ` ${Math.round(noSignal)} min inside it have no valid EEG and are not staged.` : '') +
+    (data.summary_engine ? ` Summary: ${data.summary_engine}.` : '');
 
   // Stage composition, over the analysis window
   const total = STAGES.reduce((s, k) => s + (data.stage_min[k] ?? 0), 0) + noSignal;
