@@ -508,7 +508,7 @@ function windowShapes(data) {
 }
 
 function baseLayout(total, data) {
-  const soft = cssVar('--fg-soft');
+  const soft = cssVar('--plot-text');           // a plain rgba value: Plotly cannot parse color-mix()
   const rule = cssVar('--rule');
   return {
     height: PLOT_H,
@@ -542,7 +542,7 @@ function drawHypnogram(data) {
   data.stages.forEach((s, i) => { sx.push(i * epochH); sy.push(s ? level[s] : null); });
   const traces = [{
     x: sx, y: sy, mode: 'lines', connectgaps: false, hoverinfo: 'skip', showlegend: false,
-    line: { shape: 'hv', width: 1, color: cssVar('--fg-soft') },
+    line: { shape: 'hv', width: 1, color: cssVar('--plot-text') },
   }];
 
   // ... then one thick, coloured trace per stage, made of runs of identical stage
@@ -605,7 +605,7 @@ function drawSpectrogram(data) {
   const z = Array.from({ length: F }, (_, j) => sp.power.map((row) => row[j]));
   const x = Array.from({ length: n }, (_, i) => (i + 0.5) * epochH);
 
-  const soft = cssVar('--fg-soft');
+  const soft = cssVar('--plot-text');
   const trace = {
     type: 'heatmap', x, y: sp.freqs, z, zmin, zmax,
     colorscale: SPEC_COLORSCALE, zsmooth: false,

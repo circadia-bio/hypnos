@@ -249,6 +249,9 @@ pre .err { color: var(--accent); }
 }
 
 .marker {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;          /* values line up when a label wraps */
   padding-top: 0.5rem;
   border-top: 1px solid var(--rule);
 }
@@ -387,7 +390,8 @@ pre .err { color: var(--accent); }
 .btn.btn-primary:hover { background: var(--accent); filter: brightness(1.08); }
 
 /* Analysis settings pop-up */
-:root { --st-none: rgba(120, 120, 120, 0.4); }
+:root { --st-none: rgba(120, 120, 120, 0.4); --plot-text: rgba(27, 103, 153, 0.8); }
+@media (prefers-color-scheme: dark) { :root { --plot-text: rgba(255, 167, 93, 0.85); } }
 
 #open-settings { margin-top: 0.7rem; width: 100%; justify-content: center; }
 
