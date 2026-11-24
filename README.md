@@ -52,7 +52,7 @@ Everything runs in the browser. The recording is processed on your device and is
 
 ### The markers
 
-They come from `hypnoR::compute_sleep_architecture(waso_until = "end")` on the hypnogram of the analysis window, and reproduce the notebook's `sleep_summary()`. Epochs with no valid EEG inside the window are unscored (`NA`): they count towards time in bed but towards no stage. hypnoR's default WASO stops at the last sleep epoch; hypnos asks for the end of the window. The note above the markers says which engine produced them. `waso_until` and the handling of unscored epochs are newer than hypnoR 0.1.1; if the installed hypnoR predates them, hypnos uses an equivalent built-in function and the note says so.
+They come from `hypnoR::compute_sleep_architecture(waso_until = "end")` on the hypnogram of the analysis window, and reproduce the notebook's `sleep_summary()`. Epochs with no valid EEG inside the window are unscored (`NA`): they count towards time in bed but towards no stage. hypnoR's default WASO stops at the last sleep epoch; hypnos asks for the end of the window. The note above the markers says which engine produced them. `waso_until` and the handling of unscored epochs arrived in hypnoR 0.1.2; if the installed hypnoR is older, hypnos uses an equivalent built-in function and the note says so.
 
 | Marker | Definition |
 |--------|------------|
@@ -141,7 +141,7 @@ hypnos is a static site with no build step. The repository includes a `netlify.t
 |-----------|---------|---------|
 | [webR](https://docs.r-wasm.org/webr/latest/) | 0.6.0 (pinned) | R compiled to WebAssembly |
 | [mrpheus](https://mrpheus.circadia-lab.uk) | 0.2.0 on [r-universe](https://circadia-bio.r-universe.dev) | EDF ingestion, features, staging models, spectrogram |
-| [hypnoR](https://hypnor.circadia-lab.uk) | [r-universe](https://circadia-bio.r-universe.dev); needs `waso_until` (added after 0.1.1) | Sleep summary |
+| [hypnoR](https://hypnor.circadia-lab.uk) | 0.1.2 or later on [r-universe](https://circadia-bio.r-universe.dev) (older versions work through a built-in fallback) | Sleep summary |
 | jsonlite | [repo.r-wasm.org](https://repo.r-wasm.org) | Passing results from R to the page |
 | [Plotly.js](https://plotly.com/javascript/) (cartesian bundle) | 2.35.2 | Interactive plots |
 | [Bootstrap Icons](https://icons.getbootstrap.com/) | 1.11.1 | Icons (self-hosted in `vendor/`) |

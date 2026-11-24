@@ -187,7 +187,7 @@
 }
 
 # The sleep summary. hypnoR computes it when the installed version can: it handles unscored (NA)
-# epochs and has `waso_until`, both added after hypnoR 0.1.1. Otherwise the equivalent
+# epochs and has `waso_until`, both added in hypnoR 0.1.2. Otherwise the equivalent
 # function above is used, so the page works before and after hypnoR is updated.
 .hypnos_summary <- function(stage, epoch_s = 30) {
   if (!requireNamespace("hypnoR", quietly = TRUE)) {
