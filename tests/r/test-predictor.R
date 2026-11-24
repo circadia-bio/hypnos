@@ -28,6 +28,28 @@ test_that("it reproduces LightGBM where zero counts as missing (zero split type)
   expect_matches_lightgbm("zero")
 })
 
+test_that("on single-precision features it reproduces LightGBM fed single-precision features, as YASA does", {
+  for (tag in c("nan", "zero")) {
+    model <- hy$.hypnos_parse_model(fixture(sprintf("tiny_%s.txt", tag)))
+    X     <- read_matrix(fixture(sprintf("tiny_%s_X.csv", tag)))
+    P32   <- read_probs(fixture(sprintf("tiny_%s_P32.csv", tag)))
+    X32   <- X; X32[] <- hy$.hypnos_as_float32(X)
+    expect_lt(max(abs(hy$.hypnos_predict_matrix(model, X32) - P32)), 1e-12)
+  }
+})
+
+test_that("rounding to single precision changes some of LightGBM's probabilities in these fixtures", {
+  # Rows sitting exactly on a split threshold go the other way once rounded, so a pipeline that
+  # forgot to round would be caught by the test above.
+  changed <- function(tag) {
+    P   <- read_probs(fixture(sprintf("tiny_%s_P.csv", tag)))
+    P32 <- read_probs(fixture(sprintf("tiny_%s_P32.csv", tag)))
+    unname(which(apply(abs(P - P32), 1, max) > 1e-12))
+  }
+  expect_equal(changed("nan"), 26L)
+  expect_equal(changed("zero"), c(29L, 32L))
+})
+
 test_that("the fixtures really do use the split types they are meant to test", {
   types <- function(tag) {
     txt <- readLines(fixture(sprintf("tiny_%s.txt", tag)))

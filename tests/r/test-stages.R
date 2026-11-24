@@ -70,10 +70,11 @@ test_that("validity reads the channel that was chosen, not the first one", {
 
 # ── hypnos_predict() ──────────────────────────────────────────────────────
 
-test_that("stages are LightGBM's most probable class, labelled alphabetically, and not given to epochs without signal", {
+test_that("stages are LightGBM's most probable class on single-precision features, labelled alphabetically, and not given to epochs without signal", {
   st <- fresh_state()
   X  <- as.matrix(utils::read.csv(fixture("tiny_nan_X.csv"), na.strings = "NA"))
-  P  <- unname(as.matrix(utils::read.csv(fixture("tiny_nan_P.csv"), header = FALSE)))
+  # LightGBM's own probabilities for the features rounded to single precision, as YASA feeds them
+  P  <- unname(as.matrix(utils::read.csv(fixture("tiny_nan_P32.csv"), header = FALSE)))
   n  <- nrow(X)
 
   st$features  <- tibble::as_tibble(cbind(epoch = seq_len(n), as.data.frame(X)))

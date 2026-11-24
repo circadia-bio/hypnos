@@ -3,7 +3,8 @@
 Needs: pip install lightgbm numpy.  The fixtures are committed, so the R tests do not need Python.
 Each model is trained on a few hundred random rows, then LightGBM itself predicts a test matrix
 (random rows, missing values, exact zeros, and rows sitting exactly on split thresholds). The R
-predictor in analysis.R must reproduce those probabilities.
+predictor in analysis.R must reproduce those probabilities, on float64 features (_P) and on the
+same features rounded to float32 (_P32), which is what YASA, and so the page, feeds the model.
 
 The YASA models only use one split type (decision_type 2). These tiny models use the others, so
 the predictor is checked on missing-value handling the YASA models never exercise:
@@ -71,11 +72,13 @@ def write(tag, params, X, y, cat=None):
         return
     Xt = test_matrix(path)
     P = bst.predict(Xt)
+    P32 = bst.predict(Xt.astype(np.float32))            # what YASA feeds the model: features rounded to float32
     with open(f"tiny_{tag}_X.csv", "w") as f:
         f.write(",".join(names) + "\n")
         for r in Xt:
             f.write(",".join("NA" if np.isnan(v) else repr(float(v)) for v in r) + "\n")
     np.savetxt(f"tiny_{tag}_P.csv", P, delimiter=",", fmt="%.17g")
+    np.savetxt(f"tiny_{tag}_P32.csv", P32, delimiter=",", fmt="%.17g")
     types = sorted(set(int(v) for m in re.findall(r"^decision_type=(.*)$", open(path).read(), re.M) for v in m.split()))
     print(f"{path}: {bst.num_trees()} trees, {Xt.shape[0]} test rows, decision_type values {types}")
 
