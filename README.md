@@ -1,4 +1,4 @@
-# 🌙 hypnos
+# 🌙 hypnos <img src="logo.svg" align="right" height="140"/>
 
 **Standard polysomnography metrics from an EDF file, computed entirely in your browser.**
 
@@ -8,8 +8,6 @@
 [![JavaScript](https://img.shields.io/badge/JavaScript-ES%20modules-F7DF1E)](https://developer.mozilla.org/docs/Web/JavaScript)
 [![webR](https://img.shields.io/badge/webR-0.6.0-276DC3)](https://docs.r-wasm.org/webr/latest/)
 [![Circadia Lab](https://img.shields.io/badge/circadia--bio-GitHub-014370)](https://github.com/circadia-bio)
-
-<p align="center"><img src="logo.svg" width="140" alt="hypnos logo: a pocket watch swinging like a pendulum"></p>
 
 > **Beta.** hypnos is an early release. The markers have not been validated against manually scored hypnograms; see the Limitations section below.
 
@@ -43,7 +41,7 @@ Everything runs in the browser. The recording is processed on your device and is
 
 1. **Channel extraction (JavaScript).** The EDF header is read. The EEG channel defaults to a central derivation (C4, then C3, then Cz) when the file has one, otherwise the first channel that looks like EEG, and never an oximetry channel such as `SpO2`. EOG and EMG are the first labels matching `EOG|ROC|LOC` and `EMG|chin|Chin`. A reduced plain EDF holding only the chosen signals is built from slices of the file and written to webR's in-memory filesystem.
 2. **Ingestion.** `mrpheus::read_edf()` and `mrpheus::prepare_psg()` read the reduced file and segment it into 30 s epochs.
-3. **Signal validity.** Each epoch of the EEG is classed as flat (more than half of its samples are one value), clipped (more than 0.1% of its samples sit on the channel's extremes) or ok. The automatic analysis window runs from the first epoch with a signal to the epoch before the first hour of consecutive flat epochs. This follows `psg_DLBP33N3.qmd` in the Greg_PSG analysis.
+3. **Signal validity.** Each epoch of the EEG is classed as flat (more than half of its samples are one value), clipped (more than 0.1% of its samples sit on the channel's extremes) or ok. The automatic analysis window runs from the first epoch with a signal to the epoch before the first hour of consecutive flat epochs.
 4. **Features.** The YASA feature set is computed with mrpheus (`stage_epochs()`'s internal feature code, which applies its own 0.4 to 30 Hz bandpass and 100 Hz resample).
 5. **Prediction.** The LightGBM model that matches the channels present (EEG, EEG and EOG, EEG and EMG, or all three) is evaluated in plain R (`analysis.R`), on features rounded to single precision as YASA does. The WebAssembly build of the `lightgbm` package cannot be loaded in the browser, because it is compiled with threads. The R evaluation matched Python LightGBM 4.7.0 on all eight shipped models (largest probability difference 4.4e-16, identical predicted stages). Flat epochs are then set to not staged.
 6. **Spectrogram and markers.** `mrpheus::compute_spectrogram()`, with flat epochs left blank, and `hypnoR::compute_sleep_architecture()` over the analysis window.
